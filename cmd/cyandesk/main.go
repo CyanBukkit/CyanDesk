@@ -37,7 +37,7 @@ func main() {
 	case "connect":
 		os.Exit(runConnect(os.Args[2:]))
 	case "version":
-		fmt.Println("cyandesk 0.1.1 protocol cyandesk/1")
+		fmt.Println("cyandesk 0.1.2 protocol cyandesk/1")
 	default:
 		usage()
 		os.Exit(2)
@@ -45,7 +45,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `CyanDesk 0.1.1
+	fmt.Fprint(os.Stderr, `CyanDesk 0.1.2
 
   cyandesk control --data 目录 --listen :13111 --internal 127.0.0.1:13112
   cyandesk gateway --listen :13110 --internal-url http://127.0.0.1:13112 --internal-token-file 文件
@@ -152,7 +152,8 @@ func runGateway(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	fmt.Printf("gateway listening %s\n", ln.Addr())
+	fmt.Fprintf(os.Stderr, "这是 Go 参考网关，不作为最终网关。请使用 cyandesk-gateway。\n")
+	fmt.Printf("reference gateway listening %s\n", ln.Addr())
 	srv := gateway.New(gateway.HTTPVerifier{BaseURL: *internalURL, Token: strings.TrimSpace(string(raw))})
 	if err := srv.Serve(ln); err != nil {
 		fmt.Fprintln(os.Stderr, err)

@@ -3,12 +3,13 @@
 set -eu
 umask 077
 cd "$(dirname "$0")/.."
-if ! command -v docker >/dev/null 2>&1; then
-  echo "docker is not installed; the one-command container install cannot run here" >&2
+if ! command -v docker >/dev/null 2>&1 && ! command -v podman >/dev/null 2>&1; then
+  echo "missing prerequisite: no docker or podman binary, and /var/run/docker.sock is absent" >&2
+  echo "rootlesskit and slirp4netns are also absent, so a rootless daemon was not started" >&2
   exit 1
 fi
-if ! docker info >/dev/null 2>&1; then
-  echo "docker is installed but the daemon is not reachable" >&2
+if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then
+  echo "docker binary exists but the daemon is not reachable" >&2
   exit 1
 fi
 docker compose -f deploy/compose.yaml up -d --build

@@ -22,6 +22,7 @@ import (
 func runAgent(args []string) int {
 	config, display := "", os.Getenv("DISPLAY")
 	allowUpgrade := false
+	width, height, fps := 1280, 720, 15
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--config":
@@ -34,12 +35,25 @@ func runAgent(args []string) int {
 			if i < len(args) {
 				display = args[i]
 			}
+		case "--width":
+			i++
+			width, _ = strconv.Atoi(args[i])
+		case "--height":
+			i++
+			height, _ = strconv.Atoi(args[i])
+		case "--fps":
+			i++
+			fps, _ = strconv.Atoi(args[i])
 		case "--allow-upgrade":
 			allowUpgrade = true
 		default:
 			fmt.Fprintln(os.Stderr, "未知参数")
 			return 2
 		}
+	}
+	if width < 2 || height < 2 || width%2 != 0 || height%2 != 0 || fps < 1 || fps > 60 {
+		fmt.Fprintln(os.Stderr, "宽高必须为正偶数，帧率在 1 到 60 之间。这不是性能承诺。")
+		return 2
 	}
 	if display == "" {
 		fmt.Fprintln(os.Stderr, "没有图形会话。无头主机不会伪造屏幕。")
@@ -67,7 +81,7 @@ func runAgent(args []string) int {
 				continue
 			}
 			id, _ := sess["id"].(string)
-			if err := serveOne(profile, id, display, allowUpgrade); err != nil && err != desktop.ErrRevoked {
+			if err := serveOne(profile, id, display, allowUpgrade, width, height, fps); err != nil && err != desktop.ErrRevoked {
 				fmt.Fprintln(os.Stderr, "会话结束")
 			}
 		}
@@ -75,7 +89,7 @@ func runAgent(args []string) int {
 	}
 }
 
-func serveOne(profile clientcore.Profile, sessionID, display string, allowUpgrade bool) error {
+func serveOne(profile clientcore.Profile, sessionID, display string, allowUpgrade bool, width, height, fps int) error {
 	state, ticket, err := profile.SessionTicket(sessionID)
 	if err != nil || state != "active" || ticket == "" {
 		return err
@@ -115,12 +129,14 @@ func serveOne(profile clientcore.Profile, sessionID, display string, allowUpgrad
 	return desktop.ServeHost(ctx, link, desktop.HostConfig{
 		Gate: gate, GrantedInput: desktop.HasInput(info.Scopes), AllowUpgrade: allowUpgrade,
 		Grab: func() ([]byte, int, int, error) {
-			rgb, err := capture.GrabRGB(display, 320, 240)
-			return rgb, 320, 240, err
+			rgb, err := capture.GrabRGB(display, width, height)
+			return rgb, width, height, err
 		},
 		Inject:   desktop.XSink{Display: display},
 		Alive:    func() bool { st, _, err := profile.Session(sessionID); return err == nil && st == "active" },
-		Interval: 200 * time.Millisecond,
+		Interval: time.Second / time.Duration(fps),
+		Width:    width,
+		Height:   height,
 		Queue:    desktop.NewVideoQueue(2),
 	})
 }
@@ -193,26 +209,35 @@ func runConnect(args []string) int {
 	}
 	defer link.Close()
 	defer profile.CloseSession(sessionID)
-	fmt.Println("已连接。画面窗口标题是 CyanDesk remote。关闭窗口或按 Ctrl+C 结束。")
-	view := exec.Command("cyandesk-view", "320", "240")
-	view.Env = capture.WithDisplay(os.Getenv("DISPLAY"))
-	in, _ := view.StdinPipe()
-	out, _ := view.StdoutPipe()
-	if err := view.Start(); err != nil {
-		fmt.Fprintln(os.Stderr, "找不到 cyandesk-view。请先编译 packaging/linux/cyandesk-view.c")
-		return 1
-	}
-	defer view.Process.Kill()
-	go readViewerInput(out, link, mode == "control")
+	fmt.Println("已连接。第一帧到达后打开窗口。关闭窗口或按 Ctrl+C 结束。")
+	var view *exec.Cmd
+	var in io.WriteCloser
+	defer func() {
+		if view != nil && view.Process != nil {
+			_ = view.Process.Kill()
+		}
+	}()
 	for {
 		kind, payload, err := link.Recv()
 		if err != nil {
 			fmt.Println("连接已断开")
 			return 0
 		}
-		_, rgb, _, _, ok, err := desktop.DecodeDeliveredFrame(kind, payload)
+		_, rgb, w, h, ok, err := desktop.DecodeDeliveredFrame(kind, payload)
 		if err != nil || !ok {
 			continue
+		}
+		if view == nil {
+			view = exec.Command("cyandesk-view", strconv.Itoa(w), strconv.Itoa(h))
+			view.Env = capture.WithDisplay(os.Getenv("DISPLAY"))
+			in, _ = view.StdinPipe()
+			out, _ := view.StdoutPipe()
+			if err := view.Start(); err != nil {
+				fmt.Fprintln(os.Stderr, "找不到 cyandesk-view。请先编译 packaging/linux/cyandesk-view.c")
+				return 1
+			}
+			go readViewerInput(out, link, mode == "control")
+			fmt.Printf("远端画面 %dx%d。尺寸由被控端 --width --height --fps 决定，这里不保证能维持该帧率。\n", w, h)
 		}
 		var hdr [4]byte
 		binary.BigEndian.PutUint32(hdr[:], uint32(len(rgb)))

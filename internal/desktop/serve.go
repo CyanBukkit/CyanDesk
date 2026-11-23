@@ -30,6 +30,8 @@ type HostConfig struct {
 	Inject         input.Sink
 	Alive          func() bool
 	Interval       time.Duration
+	Width          int
+	Height         int
 	Queue          *VideoQueue
 	FramesSent     *int
 	InputsRejected *int
@@ -119,9 +121,16 @@ func hostSend(ctx context.Context, link Link, cfg HostConfig) error {
 				return ErrRevoked
 			}
 			rgb, w, h, err := cfg.Grab()
-			if err != nil || w == 0 || h == 0 {
+			if cfg.Width > 0 {
+				w = cfg.Width
+			}
+			if cfg.Height > 0 {
+				h = cfg.Height
+			}
+			if err != nil || w == 0 || h == 0 || len(rgb) < w*h*3 {
 				continue
 			}
+			rgb = rgb[:w*h*3]
 			annex, err := media.EncodeH264(rgb, w, h)
 			if err != nil {
 				continue

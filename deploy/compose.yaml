@@ -14,11 +14,13 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    command: ["gateway", "--listen", "0.0.0.0:13110", "--internal-url", "http://control:13112", "--internal-token-file", "/var/lib/cyandesk/internal.token"]
+    entrypoint: ["/usr/local/bin/cyandesk-gateway"]
+    command: ["--listen", "0.0.0.0:13110", "--internal-url", "http://control:13112", "--internal-token-file", "/var/lib/cyandesk/internal.token"]
     depends_on:
       - control
     ports:
       - "13110:13110/tcp"
+      - "13110:13110/udp"
     volumes:
       - cyandesk-data:/var/lib/cyandesk:ro
     restart: unless-stopped

@@ -1,0 +1,10 @@
+[package]
+name = "cyandesk-gateway"
+version = "0.1.2"
+edition = "2021"
+description = "CyanDesk signalling and relay gateway. Forwards ciphertext only after a redeemed session ticket."
+license = "LicenseRef-CyanDesk-draft"
+
+[[bin]]
+name = "cyandesk-gateway"
+path = "src/main.rs"

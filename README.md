@@ -19,7 +19,7 @@ CGO_ENABLED=0 go build -trimpath -o bin/cyandesk ./cmd/cyandesk
 另一个终端：
 
 ```sh
-./bin/cyandesk gateway --listen 127.0.0.1:13110 --internal-url http://127.0.0.1:13112 --internal-token-file ./data/internal.token
+./gateway-rs/target/release/cyandesk-gateway --listen 127.0.0.1:13110 --internal-url http://127.0.0.1:13112 --internal-token-file ./data/internal.token
 ```
 
 客户端第一次要显式信任指纹：
@@ -54,7 +54,7 @@ gcc -o bin/cyandesk-view packaging/linux/cyandesk-view.c -lX11
 ./deploy/install.sh
 ```
 
-当前这台开发机没有 Docker 守护进程，所以这条命令还没有在这里跑通。`deploy/compose.yaml` 会构建镜像，发布 13111 和 13110/TCP，不发布内部票据端口 13112。卸载默认保留数据卷：
+这台开发机没有 Docker、podman、rootlesskit，也没有 `/var/run/docker.sock`，所以安装脚本不能在这里跑通，不能记成通过。Compose 里的网关是 Rust 二进制，同时映射 13110 的 TCP 和 UDP，不发布 13112。卸载默认保留数据卷：
 
 ```sh
 ./deploy/uninstall.sh
