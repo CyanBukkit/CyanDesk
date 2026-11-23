@@ -16,7 +16,7 @@
 | F L1 | 裁剪坐标 | 仅数学函数已测试 | `go test ./internal/display` |
 | F L2 | 真实多屏 | 只在 Xvfb 上看到一块屏 | `ListScreens` |
 | F L3 | 操作系统虚拟屏 | 未实现 | 无驱动 |
-| G 平台 | Win7/10/11、macOS、Android、Pico、Apple 仅主控、Linux 服务 | Linux 命令行已测试。Windows 10/11 的 GDI、SendInput、窗口和服务适配器已编进二进制，未在 Windows 上运行。Win7 是单独标签，未实现。其余平台未实现 | 见 `docs/STATUS.md` |
+| G 平台 | Win7/10/11、macOS、Android、Pico、Apple 仅主控、Linux 服务 | Linux 命令行已测试。Windows 10/11 已交叉编译，未在 Windows 上运行。Win7、macOS、Apple 未实现。Android 9+ 的加密会话入口已实现，并在本机对控制面和 Rust 网关测过一帧 H.264。调试 APK 在 Android 9 模拟器上打开了登录页。MediaCodec、录屏同意和无障碍手势没有在模拟器里执行，也没有用 adb 跳过系统框。没有手机或 Pico。Pico 只作为普通 Android 应用，没有 OpenXR | `docs/android.md`；`TestAndroidEntrypointCarriesH264ThroughBuiltServer` |
 | G 无头 Linux | 不伪造画面；文件路径不能逃出根目录 | 路径约束已测试。远程命令执行未实现 | `go test ./internal/files` |
 | H VR | SteamVR / ALVR | 未实现 | 许可证已归档，没有构建 |
 | I 安装 | 13110/13111、签名制品、卸载保留数据 | 二进制服务器包已在本机启动，健康检查通过，13112 不在公网端口上。Docker 未测试，没有 compose up。制品签名函数已测试 | `deploy/binary-health.sh`；`TestDockerfileAndCompose` |

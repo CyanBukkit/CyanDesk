@@ -4,7 +4,13 @@
 
 ## 测试基线
 
-正在给用户测试的包仍是 0.1.5。校验写在 `docs/release/0.1.5-baseline.md`。不要用后面的构建替换那两个文件。
+正在给用户测试的包仍是 0.1.5。校验写在 `docs/release/0.1.5-baseline.md`。不要用后面的构建替换那两个文件，也不要把内部改动说成用户必须马上更换的版本。0.1.5 的 UDP 头问题按复现结果是直连路径的可用性影响，不是解密或注入。这不表示 0.1.5 已经过审计。
+
+## 当前
+
+Android 不再只是登录壳。`mobile` 包走现有控制面的登记、票据和 Noise，并被 gomobile 绑进调试 APK。被控端在系统录屏同意之后用 MediaCodec 编码，主控端把 Annex-B 解到 Surface。输入只在票据含 `input` 且用户打开了无障碍服务时注入。细节和 Android 9 与更新版本的权限差别在 `docs/android.md`。
+
+`TestAndroidEntrypointCarriesH264ThroughBuiltServer` 在这台机器上通过了控制面和 Rust 网关，画面是 libx264 的一帧红色，不是 HTTP 成功。Rust 网关在两边同时兑换一次性票据时会等先成功的那次，不再把后到的一边直接拒绝。Android 9 模拟器能装上调试包并打开登录页。MediaCodec、录屏同意框和无障碍手势没有在模拟器里跑，也没有手机或 Pico。直连 UDP 在手机上没有测过。macOS、Windows 7、Apple 系统和虚拟显示器仍然没有实现。Windows 10/11 仍只是交叉编译。ALVR 包仍只解析帧头，不是 SteamVR。
 
 ## 0.1.5
 
@@ -24,9 +30,7 @@
 - 命令：`agent` 和 `connect` 走同一套入口，采集和窗口按系统分开。Linux 仍用 X11。Windows 10/11 构建使用 GDI BitBlt、SendInput、JPEG 和 Win32 窗口，另有一个服务适配器。
 - Windows 7 用单独的 `cyandesk_win7` 构建标签，不在这次的 Windows 二进制里，也没有实现。
 
-最终网关是 Rust 程序 `cyandesk-gateway`。仓库里的 Go 网关只留作对照。说明见 `docs/ADR-gateway-go.md`。
-
-`agent` / `connect` 目前仍在拨号时选定一条路径并关掉另一条。能在丢包后迁回的是 `desktop.Live`，由 `TestLiveUDPMigration` 驱动，还没有接到这两条命令的拨号函数上。
+最终网关是 Rust 程序 `cyandesk-gateway`。仓库里的 Go 网关只留作对照。说明见 `docs/ADR-gateway-go.md`。`agent` 和 `connect` 保持中继和直连两条已认证路径，见上面的 0.1.5 节。
 
 ## 已测试
 
@@ -46,7 +50,7 @@
 | Windows 10/11 | Win32 窗口代码 | GDI BitBlt、SendInput、服务适配器 | 交叉编译出了 PE32+ 二进制。没有在 Windows 上运行 |
 | Windows 7 | 不在上述二进制里 | 同左 | 未实现，未测试 |
 | macOS Intel / Apple Silicon | 未实现 | 未实现 | 无 |
-| Android 9+ / Pico | 未实现 | 未实现 | 无 |
+| Android 9+ / Pico | 调试 APK 可登录、申请会话并用 MediaCodec 解码 | 调试 APK 在系统录屏同意后用 MediaCodec 编码；无障碍注入受票据约束 | Go 入口对控制面和 Rust 网关测过一帧 H.264。Android 9 模拟器打开了登录页。编码、录屏框和手势没有跑。没有手机或 Pico。不是 OpenXR |
 | iOS / iPadOS / visionOS | 未实现 | 设计上只做主控 | 无 |
 | 虚拟显示器 L3、SteamVR / ALVR | 未实现 | 未实现 | 无 |
 
@@ -55,9 +59,8 @@
 ## 没有做
 
 - 公网 NAT 和真实防火墙没有测。缺测试环境是阻塞项，不是把模拟结果写成通过。
-- `agent` / `connect` 还不会在会话中途迁移。
 - 没有性能承诺。`--width --height --fps` 只是采集参数。
-- RustDesk 没有链进来。ALVR 没有构建。
+- RustDesk 没有链进来。ALVR 只有帧头对照，没有 SteamVR 运行时。
 - 没有操作系统虚拟显示器。
-- 这台机器没有 Docker、podman、rootlesskit、slirp4netns，也没有 `/var/run/docker.sock`。没有改宿主机防火墙。Dockerfile 和 Compose 只做了文本核对：网关是 Rust 二进制，13110 同时有 TCP 和 UDP，13112 不映射出来，入口脚本不打印引导凭据。Compose 没有跑过。
+- Docker 曾在这台隔离机器上构建并做过本机冒烟，不是用户的服务器，也没有改宿主机防火墙。
 - 没有公网部署，没有购买，没有使用真实用户的服务器、设备或账号，没有签名证书。

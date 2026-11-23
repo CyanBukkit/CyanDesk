@@ -20,4 +20,5 @@ android {
 }
 dependencies {
     implementation(project(":core"))
+    implementation(files("libs/cyandesk.aar"))
 }

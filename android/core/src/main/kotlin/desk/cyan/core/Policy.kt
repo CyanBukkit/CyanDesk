@@ -31,6 +31,13 @@ fun mayCapture(projectionAccepted: Boolean): Boolean = projectionAccepted
 fun mayInject(mode: SessionMode, accessibilityEnabledByUser: Boolean): Boolean =
     mode == SessionMode.CONTROL && accessibilityEnabledByUser
 
+/**
+ * Host injection follows the ticket the server issued. A local control button
+ * cannot widen a view-only ticket, and a revoked session is not granted input.
+ */
+fun mayInjectGranted(ticketAllowsInput: Boolean, accessibilityEnabledByUser: Boolean): Boolean =
+    ticketAllowsInput && accessibilityEnabledByUser
+
 fun encodeFrame(type: Int, payload: ByteArray): ByteArray {
     require(type in 1..255)
     val out = ByteArray(10 + payload.size)

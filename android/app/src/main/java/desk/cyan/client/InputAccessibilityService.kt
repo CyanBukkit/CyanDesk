@@ -3,16 +3,17 @@ package desk.cyan.client
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
-import desk.cyan.core.SessionMode
-import desk.cyan.core.mayInject
+import desk.cyan.core.mayInjectGranted
 
 class InputAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         enabled = true
+        instance = this
     }
 
     override fun onDestroy() {
         enabled = false
+        if (instance === this) instance = null
         super.onDestroy()
     }
 
@@ -20,8 +21,8 @@ class InputAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {}
 
-    fun injectTap(x: Float, y: Float, mode: SessionMode): Boolean {
-        if (!mayInject(mode, enabled)) return false
+    fun injectTap(x: Float, y: Float, ticketAllowsInput: Boolean): Boolean {
+        if (!mayInjectGranted(ticketAllowsInput, enabled)) return false
         val path = Path().apply { moveTo(x, y) }
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0, 40))
@@ -30,6 +31,7 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     companion object {
-        var enabled: Boolean = false
+        @Volatile var enabled: Boolean = false
+        @Volatile var instance: InputAccessibilityService? = null
     }
 }

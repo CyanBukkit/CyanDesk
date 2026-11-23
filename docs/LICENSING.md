@@ -31,3 +31,5 @@ ALVR 官方 README 写明 PC 端支持 Windows 10/11 与 Linux，不支持 Windo
 ## 依赖
 
 Go 模块清单在实现稳定后由 `go list -m all` 生成到 `docs/upstream/go-modules.txt`。管理后台的 npm 依赖以 `admin-web/package-lock.json` 为准。构建时不要把密钥写进镜像。
+
+Android 绑定使用 `golang.org/x/mobile` `v0.0.0-20261117202452-47699113848a`，许可证是 BSD-3-Clause（Go Authors）。会话加密仍是桌面端已经使用的 `github.com/flynn/noise` `v1.1.0`，BSD-3-Clause。没有为手机另写一套 Noise。

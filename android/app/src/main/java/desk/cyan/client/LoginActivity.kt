@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import cyandesk.mobile.Mobile
 import desk.cyan.core.Fingerprint
 
 class LoginActivity : Activity() {
@@ -23,20 +24,30 @@ class LoginActivity : Activity() {
                 return@setOnClickListener
             }
             findViewById<EditText>(R.id.password).setText("")
-            status.text = "正在登录"
+            status.text = "正在登录并登记这台 Android 设备"
             Thread {
                 val result = runCatching {
-                    val api = ServerApi(server, fingerprint)
-                    val token = api.login(user, password)
-                    api.devices(token)
+                    Mobile.touch()
+                    val agent = Mobile.connect(server, fingerprint, user, password)
+                    val trust = agent.enroll("android")
+                    if (trust != "trusted") {
+                        agent.approve(agent.deviceID(), agent.fingerprint())
+                    }
+                    agent to agent.devices()
                 }
                 runOnUiThread {
-                    result.onSuccess { devices ->
+                    result.onSuccess { (agent, devices) ->
+                        Hub.agent = agent
                         val next = Intent(this, DeviceActivity::class.java)
-                        next.putExtra("labels", devices.map { "${it.trust}  ${it.name}  ${it.id}" }.toTypedArray())
+                        next.putExtra("devices", devices)
                         startActivity(next)
                     }.onFailure {
-                        status.text = "登录没有完成。指纹、地址或账号没有被接受。"
+                        val msg = it.message ?: "登录没有完成"
+                        status.text = if (password.isNotEmpty() && msg.contains(password)) {
+                            "登录没有完成。指纹、地址或账号没有被接受。"
+                        } else {
+                            msg
+                        }
                     }
                 }
             }.start()

@@ -30,6 +30,18 @@ class PolicyTest {
         assertFalse(mayInject(SessionMode.CONTROL, accessibilityEnabledByUser = false))
         assertFalse(mayInject(SessionMode.VIEW, accessibilityEnabledByUser = true))
         assertTrue(mayInject(SessionMode.CONTROL, accessibilityEnabledByUser = true))
+        assertFalse(mayInjectGranted(ticketAllowsInput = false, accessibilityEnabledByUser = true))
+        assertFalse(mayInjectGranted(ticketAllowsInput = true, accessibilityEnabledByUser = false))
+        assertTrue(mayInjectGranted(ticketAllowsInput = true, accessibilityEnabledByUser = true))
+    }
+
+    @Test
+    fun avccBecomesAnnexB() {
+        val avcc = byteArrayOf(0, 0, 0, 2, 0x65, 0x88.toByte())
+        val annex = Annex.avccToAnnexB(avcc)
+        assertEquals(byteArrayOf(0, 0, 0, 1, 0x65, 0x88.toByte()).toList(), annex.toList())
+        val already = byteArrayOf(0, 0, 0, 1, 0x67)
+        assertEquals(already.toList(), Annex.avccToAnnexB(already).toList())
     }
 
     @Test

@@ -209,6 +209,9 @@ func reportedEngine(osName string) (string, bool) {
 		return "linux-ffmpeg", true
 	case "windows":
 		return "windows-gdi", true
+	case "android":
+		// MediaProjection plus MediaCodec. Not an OpenXR or Pico runtime.
+		return "android-mediacodec", true
 	default:
 		return "unimplemented", false
 	}

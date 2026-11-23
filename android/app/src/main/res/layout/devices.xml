@@ -1,31 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
-    <ListView
-        android:id="@+id/devices"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-    <Button
-        android:id="@+id/view"
+    android:layout_height="match_parent">
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="观看" />
-    <Button
-        android:id="@+id/control"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="控制" />
-    <Button
-        android:id="@+id/capture"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="同意系统录屏后开始采集" />
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-</LinearLayout>
+        android:orientation="vertical"
+        android:padding="16dp">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="点一台设备。指纹必须和你核对过的一致。变了就停止连接。" />
+        <ListView
+            android:id="@+id/devices"
+            android:layout_width="match_parent"
+            android:layout_height="240dp" />
+        <Button
+            android:id="@+id/view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="观看这台设备" />
+        <Button
+            android:id="@+id/control"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="请求控制这台设备" />
+        <Button
+            android:id="@+id/host"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="作为被控，查看等待中的连接" />
+        <Button
+            android:id="@+id/agreeView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="按指纹同意观看，然后出现系统录屏框" />
+        <Button
+            android:id="@+id/agreeControl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="按指纹同意控制。需要你已打开输入服务" />
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/android_limits" />
+    </LinearLayout>
+</ScrollView>

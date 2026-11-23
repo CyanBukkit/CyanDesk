@@ -4,7 +4,9 @@
 
 设计原文在 `docs/design/CyanDesk-design-v0.1-approved.canvas.tsx`。做到哪一步写在 `docs/STATUS.md` 和 `docs/ACCEPTANCE.md`。
 
-要在一台 Linux 上跑服务端，用打好的包 `cyandesk-server-0.1.6-linux-amd64.tar.gz`。用法在包里的 `使用说明.txt`。二进制模式用包内的 `bin/cyandesk`、`bin/cyandesk-gateway` 和 `admin/`。Docker 用 `CYANDESK_CERT_HOST=你的IP或域名 sh deploy/install.sh`。0.1.4 和 0.1.5 的数据目录可以继续用，升级不会删设备和证书。
+正在测试的服务端和 Windows 客户端仍是 0.1.5。校验在 `docs/release/0.1.5-baseline.md`。后面的内部构建没有替换那两个文件，也不需要为了这次 Android 工作更换已经在测的 0.1.5。0.1.5 的直连 UDP 头问题是可用性影响，不表示协议已经审计通过。
+
+Android 调试包是另一条入口，说明在 `docs/android.md`。它不是 0.1.5 的替代。本机若要从源码起服务，用下面的命令。Docker 用 `CYANDESK_CERT_HOST=你的IP或域名 sh deploy/install.sh`。
 
 ## 本机运行
 

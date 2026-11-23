@@ -188,37 +188,52 @@ fn maybe_ready(s: &mut Session) {
 
 impl State {
     fn lookup_or_redeem(&self, ticket: &str) -> Result<String, String> {
-        {
-            let g = self.inner.lock().unwrap();
-            if let Some(id) = g.by_ticket.get(ticket).cloned() {
-                return Ok(id);
+        // The control plane accepts a ticket jti once. Two peers redeem together.
+        // The loser must use the winner's cached session instead of failing closed.
+        for _ in 0..8 {
+            {
+                let g = self.inner.lock().unwrap();
+                if let Some(id) = g.by_ticket.get(ticket).cloned() {
+                    return Ok(id);
+                }
             }
+            match self.control.redeem(ticket) {
+                Ok(claims) => {
+                    let mut g = self.inner.lock().unwrap();
+                    if let Some(id) = g.by_ticket.get(ticket).cloned() {
+                        return Ok(id);
+                    }
+                    let id = claims.session_id.clone();
+                    g.by_ticket.insert(ticket.to_string(), id.clone());
+                    if !g.sessions.contains_key(&id) {
+                        g.sessions.insert(
+                            id.clone(),
+                            Session {
+                                ticket: ticket.to_string(),
+                                claims,
+                                host: None,
+                                ctrl: None,
+                                host_udp: None,
+                                ctrl_udp: None,
+                                host_cookie: None,
+                                ctrl_cookie: None,
+                                ready_sent: false,
+                                bytes: 0,
+                            },
+                        );
+                    }
+                    return Ok(id);
+                }
+                Err(_) => {
+                    let g = self.inner.lock().unwrap();
+                    if let Some(id) = g.by_ticket.get(ticket).cloned() {
+                        return Ok(id);
+                    }
+                }
+            }
+            thread::sleep(Duration::from_millis(25));
         }
-        let claims = self.control.redeem(ticket).map_err(|_| "denied".to_string())?;
-        let mut g = self.inner.lock().unwrap();
-        if let Some(id) = g.by_ticket.get(ticket).cloned() {
-            return Ok(id);
-        }
-        let id = claims.session_id.clone();
-        g.by_ticket.insert(ticket.to_string(), id.clone());
-        if !g.sessions.contains_key(&id) {
-            g.sessions.insert(
-                id.clone(),
-                Session {
-                    ticket: ticket.to_string(),
-                    claims,
-                    host: None,
-                    ctrl: None,
-                    host_udp: None,
-                    ctrl_udp: None,
-                    host_cookie: None,
-                    ctrl_cookie: None,
-                    ready_sent: false,
-                    bytes: 0,
-                },
-            );
-        }
-        Ok(id)
+        Err("denied".to_string())
     }
 
     fn attach_tcp(&self, ticket: &str, role: u8) -> Result<String, String> {
