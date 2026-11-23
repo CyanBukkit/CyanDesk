@@ -1,0 +1,27 @@
+services:
+  control:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["control", "--data", "/var/lib/cyandesk", "--listen", "0.0.0.0:13111", "--internal", "0.0.0.0:13112", "--admin", "/usr/share/cyandesk/admin"]
+    ports:
+      - "13111:13111"
+    volumes:
+      - cyandesk-data:/var/lib/cyandesk
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["gateway", "--listen", "0.0.0.0:13110", "--internal-url", "http://control:13112", "--internal-token-file", "/var/lib/cyandesk/internal.token"]
+    depends_on:
+      - control
+    ports:
+      - "13110:13110/tcp"
+    volumes:
+      - cyandesk-data:/var/lib/cyandesk:ro
+    restart: unless-stopped
+
+volumes:
+  cyandesk-data:

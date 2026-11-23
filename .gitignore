@@ -1,0 +1,7 @@
+/bin/
+/data/
+/admin-web/node_modules/
+/admin-web/dist/
+*.db
+*.db-wal
+*.db-shm

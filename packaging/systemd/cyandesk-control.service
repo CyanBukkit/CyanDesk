@@ -1,0 +1,13 @@
+[Unit]
+Description=CyanDesk control API
+After=network-online.target
+
+[Service]
+Type=simple
+User=cyandesk
+ExecStart=/usr/local/bin/cyandesk control --data /var/lib/cyandesk --listen 0.0.0.0:13111 --internal 127.0.0.1:13112 --admin /usr/share/cyandesk/admin
+Restart=on-failure
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
