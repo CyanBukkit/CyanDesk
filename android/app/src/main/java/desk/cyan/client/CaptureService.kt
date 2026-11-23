@@ -18,6 +18,7 @@ import android.os.IBinder
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import desk.cyan.core.Annex
+import java.io.File
 import java.nio.ByteBuffer
 
 /**
@@ -81,18 +82,13 @@ class CaptureService : Service() {
             var link: cyandesk.mobile.Link? = null
             try {
                 link = agent.dial(Hub.ROLE_HOST.toLong(), session, pinned)
+                mark("running")
                 val metrics = DisplayMetrics()
                 @Suppress("DEPRECATION")
                 (getSystemService(WINDOW_SERVICE) as WindowManager).defaultDisplay.getMetrics(metrics)
                 val size = evenSize(metrics.widthPixels, metrics.heightPixels)
-                val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, size.first, size.second)
-                format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                format.setInteger(MediaFormat.KEY_BIT_RATE, 2_000_000)
-                format.setInteger(MediaFormat.KEY_FRAME_RATE, 15)
-                format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
-                val encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+                val encoder = openEncoder(size.first, size.second)
                 codec = encoder
-                encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                 val input = encoder.createInputSurface()
                 encoder.start()
                 display = projection.createVirtualDisplay(
@@ -168,10 +164,15 @@ class CaptureService : Service() {
                     }
                     encoder.releaseOutputBuffer(index, false)
                 }
-            } catch (_: Exception) {
+            } catch (err: Exception) {
                 running = false
+                mark("error: " + (err.message ?: err.toString()))
             } finally {
                 running = false
+                val current = runCatching { File(filesDir, "capture-state.txt").readText() }.getOrDefault("")
+                if (!current.startsWith("error:")) {
+                    mark("stopped")
+                }
                 runCatching { link?.close() }
                 runCatching { display?.release() }
                 runCatching { codec?.stop() }
@@ -186,6 +187,37 @@ class CaptureService : Service() {
     override fun onDestroy() {
         running = false
         super.onDestroy()
+    }
+
+    private fun openEncoder(width: Int, height: Int): MediaCodec {
+        fun build(baseline: Boolean): MediaCodec {
+            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height)
+            format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+            format.setInteger(MediaFormat.KEY_BIT_RATE, 1_500_000)
+            format.setInteger(MediaFormat.KEY_FRAME_RATE, 15)
+            format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+            if (baseline) {
+                format.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+                format.setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel31)
+            }
+            val encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+            try {
+                encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            } catch (err: Exception) {
+                encoder.release()
+                throw err
+            }
+            return encoder
+        }
+        return try {
+            build(true)
+        } catch (_: Exception) {
+            build(false)
+        }
+    }
+
+    private fun mark(state: String) {
+        runCatching { File(filesDir, "capture-state.txt").writeText(state) }
     }
 
     private fun evenSize(width: Int, height: Int): Pair<Int, Int> {

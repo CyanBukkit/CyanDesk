@@ -29,7 +29,25 @@
 | Android 14（API 34，本包的 targetSdk） | `startForeground` 带 `mediaProjection`。系统把这次录屏同意和这次服务启动绑在一起，不能拿旧的同意复用。 | 同上。 |
 | 更新的系统 | 可能还会收紧录屏前台服务和特殊用途声明。本包没有声明 `specialUse`，也没有在那些版本上运行。 | 无障碍仍不能由应用自行打开。 |
 
-MediaCodec 的编码和解码调用在 APK 里。这台机器后来用 KVM 启动了 Android 9（API 28）模拟器，装上调试包后登录页能显示服务器、指纹、账号和“没有 OpenXR”的说明。没有替模拟器点录屏同意，也没有用 adb 授予 MediaProjection 或无障碍。因此编码器、Surface 和解码循环仍没有在 Android 进程里跑过。没有手机，没有 Pico。
+## 这台 Android 9 模拟器上实际跑过的
+
+`TestEmulatorShowsRealFramesBothWays`（`-tags androidemu`）在 API 28 模拟器上走完界面，没有用 `appops` 或 `settings put secure` 打开权限。
+
+- 登录后屏幕上的本机指纹被读出来，再由已信任设备批准。指纹不一致就不会连接。
+- 会话先停在等待同意，主机点同意后才发票据。
+- 桌面用 ffmpeg 连续送出红、绿、蓝三色 H.264。Android 的 MediaCodec 解到 Surface。截图里画面依次是这三色，状态写着只有观看。
+- 只观看时点画面，没有指针送到主机。
+- 旋转后观看会话没有被拆掉。关闭会话后 Surface 停止，文字变成“会话已停止”。
+- 被控端点同意后，系统录屏框由界面点击“START NOW”。MediaProjection 的画面经 MediaCodec 编码，经同一台控制面和 Rust 网关送出。桌面用 ffmpeg 解出了红、绿、蓝。观看票据下的远程点击没有点中“输入目标”。关闭会话后采集服务退出。
+- 直连 UDP 在 Android 拨号里关掉了，还没有实现。
+
+没有把这次叫做手机可用。没有 Pico，没有真机。
+
+无障碍开关没有打开。这个模拟器的无障碍设置列表不响应滑动和翻页，CyanDesk 那一行出不来。测试没有改 secure settings。因此控制票据下的手势注入没有执行。
+
+Android 10、13、14 没有启动对应模拟器。`mayStartCapture` 只在 JVM 里区分了 API 28、29、33、34 的决定：33 起没有通知同意就不采集，29 起代码会带 mediaProjection 前台服务类型。API 35 及更新版本的系统行为没有跑过。
+
+调试包按 ABI 分开，未签名。x86_64 给这个模拟器，arm64-v8a 给以后的设备。没有 universal 包，也没有 release 签名包。
 
 ## 构建
 

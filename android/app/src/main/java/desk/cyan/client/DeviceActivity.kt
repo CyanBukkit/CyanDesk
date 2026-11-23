@@ -12,6 +12,7 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ListView
 import android.widget.TextView
+import desk.cyan.core.mayStartCapture
 
 class DeviceActivity : Activity() {
     private var rows: List<Row> = emptyList()
@@ -21,7 +22,13 @@ class DeviceActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.devices)
+        val own = intent.getStringExtra("ownFingerprint").orEmpty()
+        val trust = intent.getStringExtra("trust").orEmpty()
+        findViewById<TextView>(R.id.ownfp).text =
+            if (own.length == 64) "本机指纹 $own。信任状态 $trust。待批准时请在已信任的设备上核对这串指纹后再批准。"
+            else "还没有本机指纹"
         show(intent.getStringExtra("devices").orEmpty())
+        findViewById<Button>(R.id.refresh).setOnClickListener { refresh() }
         findViewById<ListView>(R.id.devices).setOnItemClickListener { _, _, position, _ ->
             selected = position
             val row = rows[position]
@@ -39,9 +46,26 @@ class DeviceActivity : Activity() {
             val p = line.split('\t')
             if (p.size < 4) null else Row(p[0], p[1], p[2], p[3])
         }.toList()
-        val labels = if (rows.isEmpty()) listOf("没有设备") else rows.map { "${it.trust}  ${it.name}" }
+        val labels = if (rows.isEmpty()) listOf("没有设备") else rows.map { "${it.trust}  ${it.name}  ${it.fingerprint}" }
         findViewById<ListView>(R.id.devices).adapter =
             ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
+    }
+
+    private fun refresh() {
+        val agent = Hub.agent ?: return
+        Thread {
+            val listed = runCatching { agent.devices() }
+            runOnUiThread {
+                listed.onSuccess { text ->
+                    show(text)
+                    val own = findViewById<TextView>(R.id.ownfp)
+                    val shown = Regex("[0-9a-fA-F]{64}").find(own.text)?.value?.lowercase()
+                    rows.find { it.fingerprint.equals(shown, ignoreCase = true) }?.let {
+                        own.text = "本机指纹 ${it.fingerprint}。信任状态 ${it.trust}。待批准时请在已信任的设备上核对这串指纹后再批准。"
+                    }
+                }.onFailure { status(it.message ?: "刷新失败") }
+            }
+        }.start()
     }
 
     private fun request(mode: String) {
@@ -117,9 +141,9 @@ class DeviceActivity : Activity() {
             runOnUiThread {
                 consented.onSuccess {
                     Hub.pinned = it
-                    if (Build.VERSION.SDK_INT >= 33 &&
-                        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                    ) {
+                    val notificationsOk = Build.VERSION.SDK_INT < 33 ||
+                        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                    if (!mayStartCapture(Build.VERSION.SDK_INT, projectionAccepted = true, notificationGranted = notificationsOk)) {
                         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9)
                     } else {
                         askProjection()
@@ -160,6 +184,7 @@ class DeviceActivity : Activity() {
         } else {
             startService(start)
         }
+        startActivity(Intent(this, PatternActivity::class.java))
         status("已把系统返回的录屏结果交给采集服务。")
     }
 

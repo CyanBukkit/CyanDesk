@@ -479,7 +479,7 @@ func (p Profile) GatewayAddr() (string, error) {
 	if err != nil {
 		return advertised, nil
 	}
-	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" || host == "::1" {
+	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" || host == "::" || host == "::1" {
 		if u.Hostname() != "" && u.Hostname() != host {
 			return net.JoinHostPort(u.Hostname(), port), nil
 		}

@@ -17,9 +17,12 @@ import (
 
 // Direct tells OpenLive which address to bind and which address to tell the peer.
 // Advertise is the address the peer can dial. It defaults to the bound socket.
+// Skip leaves only the authenticated relay. Android sets Skip because a direct
+// UDP path is not integrated there yet.
 type Direct struct {
 	Bind      string
 	Advertise string
+	Skip      bool
 }
 
 // OpenLive keeps the authenticated relay and, when it comes up, a direct UDP
@@ -46,11 +49,13 @@ func OpenLive(ctx context.Context, side Side, direct Direct) (*Result, error) {
 		recv: func() ([]byte, error) { return relay.Recv(nil) },
 		stop: client.Close,
 	})
-	go func() {
-		if err := m.attachDirect(ctx, side, client, direct); err != nil {
-			fmt.Fprintf(os.Stderr, "direct: %v\n", err)
-		}
-	}()
+	if !direct.Skip {
+		go func() {
+			if err := m.attachDirect(ctx, side, client, direct); err != nil {
+				fmt.Fprintf(os.Stderr, "direct: %v\n", err)
+			}
+		}()
+	}
 	if side.Role == protocol.RoleController {
 		go m.steer(ctx)
 	}

@@ -10,7 +10,7 @@
 
 Android 不再只是登录壳。`mobile` 包走现有控制面的登记、票据和 Noise，并被 gomobile 绑进调试 APK。被控端在系统录屏同意之后用 MediaCodec 编码，主控端把 Annex-B 解到 Surface。输入只在票据含 `input` 且用户打开了无障碍服务时注入。细节和 Android 9 与更新版本的权限差别在 `docs/android.md`。
 
-`TestAndroidEntrypointCarriesH264ThroughBuiltServer` 在这台机器上通过了控制面和 Rust 网关，画面是 libx264 的一帧红色，不是 HTTP 成功。Rust 网关在两边同时兑换一次性票据时会等先成功的那次，不再把后到的一边直接拒绝。Android 9 模拟器能装上调试包并打开登录页。MediaCodec、录屏同意框和无障碍手势没有在模拟器里跑，也没有手机或 Pico。直连 UDP 在手机上没有测过。macOS、Windows 7、Apple 系统和虚拟显示器仍然没有实现。Windows 10/11 仍只是交叉编译。ALVR 包仍只解析帧头，不是 SteamVR。
+`TestEmulatorShowsRealFramesBothWays` 在 Android 9 模拟器上通过。桌面 ffmpeg 的红绿蓝经 Rust 网关显示在 Surface 上；同意系统录屏后，MediaCodec 的红绿蓝被桌面解出。只观看不会产生点击。关闭会话后采集服务退出，观看端停止解码。模拟器的无障碍列表滑不动，控制手势没有执行，也没有改 secure settings。这不是手机验收。直连 UDP 仍未做。Android 10/13/14 只有 JVM 里的权限判断，没有对应模拟器。macOS、Windows 7、Apple 系统和虚拟显示器仍然没有实现。Windows 10/11 仍只是交叉编译。ALVR 包仍只解析帧头，不是 SteamVR。
 
 ## 0.1.5
 
@@ -50,7 +50,7 @@ Android 不再只是登录壳。`mobile` 包走现有控制面的登记、票据
 | Windows 10/11 | Win32 窗口代码 | GDI BitBlt、SendInput、服务适配器 | 交叉编译出了 PE32+ 二进制。没有在 Windows 上运行 |
 | Windows 7 | 不在上述二进制里 | 同左 | 未实现，未测试 |
 | macOS Intel / Apple Silicon | 未实现 | 未实现 | 无 |
-| Android 9+ / Pico | 调试 APK 可登录、申请会话并用 MediaCodec 解码 | 调试 APK 在系统录屏同意后用 MediaCodec 编码；无障碍注入受票据约束 | Go 入口对控制面和 Rust 网关测过一帧 H.264。Android 9 模拟器打开了登录页。编码、录屏框和手势没有跑。没有手机或 Pico。不是 OpenXR |
+| Android 9+ / Pico | Android 9 模拟器上 Surface 解出了桌面的红绿蓝 | 同一模拟器在系统录屏同意后用 MediaCodec 送出红绿蓝。观看不注入。控制手势没跑到 | 不是手机或 Pico。无障碍开关在这个模拟器里点不到。直连 UDP 未做。Android 10/13/14 未开机 |
 | iOS / iPadOS / visionOS | 未实现 | 设计上只做主控 | 无 |
 | 虚拟显示器 L3、SteamVR / ALVR | 未实现 | 未实现 | 无 |
 

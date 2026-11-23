@@ -29,17 +29,20 @@ class LoginActivity : Activity() {
                 val result = runCatching {
                     Mobile.touch()
                     val agent = Mobile.connect(server, fingerprint, user, password)
-                    val trust = agent.enroll("android")
+                    var trust = agent.enroll("android")
                     if (trust != "trusted") {
-                        agent.approve(agent.deviceID(), agent.fingerprint())
+                        val approved = runCatching { agent.approve(agent.deviceID(), agent.fingerprint()) }
+                        if (approved.isSuccess) trust = "trusted"
                     }
-                    agent to agent.devices()
+                    Triple(agent, agent.devices(), trust)
                 }
                 runOnUiThread {
-                    result.onSuccess { (agent, devices) ->
+                    result.onSuccess { (agent, devices, trust) ->
                         Hub.agent = agent
                         val next = Intent(this, DeviceActivity::class.java)
                         next.putExtra("devices", devices)
+                        next.putExtra("ownFingerprint", agent.fingerprint())
+                        next.putExtra("trust", trust)
                         startActivity(next)
                     }.onFailure {
                         val msg = it.message ?: "登录没有完成"

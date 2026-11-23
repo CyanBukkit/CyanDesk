@@ -33,4 +33,34 @@ object Annex {
         if (!converted) return packet.copyOf()
         return out.toByteArray()
     }
+
+    /** NAL units without start codes. Types 7 and 8 are SPS and PPS. */
+    fun nalUnits(annex: ByteArray): List<ByteArray> {
+        val starts = ArrayList<Int>()
+        var i = 0
+        while (i + 3 < annex.size) {
+            if (annex[i] == 0.toByte() && annex[i + 1] == 0.toByte()) {
+                if (annex[i + 2] == 1.toByte()) {
+                    starts.add(i + 3)
+                    i += 3
+                    continue
+                }
+                if (i + 3 < annex.size && annex[i + 2] == 0.toByte() && annex[i + 3] == 1.toByte()) {
+                    starts.add(i + 4)
+                    i += 4
+                    continue
+                }
+            }
+            i++
+        }
+        return List(starts.size) { n ->
+            val from = starts[n]
+            val to = if (n + 1 < starts.size) {
+                var end = starts[n + 1]
+                while (end > from && annex[end - 1] == 0.toByte()) end--
+                end
+            } else annex.size
+            annex.copyOfRange(from, to.coerceAtLeast(from))
+        }
+    }
 }

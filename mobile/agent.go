@@ -216,8 +216,9 @@ func (a *Agent) Dial(role int, sessionID, pinned string) (*Link, error) {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	timer := time.AfterFunc(20*time.Second, cancel)
-	res, err := desktop.OpenAuthorized(ctx, gateway, byte(role), ticket, pinned, fp, noiseKey, self, desktop.Direct{})
+	timer := time.AfterFunc(40*time.Second, cancel)
+	// Direct UDP from Android is not a supported path. The relay is the session.
+	res, err := desktop.OpenAuthorized(ctx, gateway, byte(role), ticket, pinned, fp, noiseKey, self, desktop.Direct{Skip: true})
 	if !timer.Stop() {
 		cancel()
 		if res != nil {

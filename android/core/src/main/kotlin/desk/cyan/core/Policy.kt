@@ -25,6 +25,21 @@ fun scopesFor(mode: SessionMode): List<String> = when (mode) {
 fun mayCapture(projectionAccepted: Boolean): Boolean = projectionAccepted
 
 /**
+ * Version gates for starting capture. These do not grant anything.
+ * Android 13+ needs the notification permission or the foreground service cannot stay.
+ * Android 10+ must declare the mediaProjection service type. Android 14 checks that
+ * the system consent belongs to this start. Newer than 14 is not decided here.
+ */
+fun mayStartCapture(sdk: Int, projectionAccepted: Boolean, notificationGranted: Boolean): Boolean {
+    if (!projectionAccepted) return false
+    if (sdk >= 33 && !notificationGranted) return false
+    return true
+}
+
+/** The app asks for the mediaProjection service type from API 29 onward. That is not evidence the platform still accepts it after API 34. */
+fun captureUsesProjectionServiceType(sdk: Int): Boolean = sdk >= 29
+
+/**
  * Input injection requires both a control scope and the user-enabled accessibility service.
  * The app cannot turn that service on by itself.
  */

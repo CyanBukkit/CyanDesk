@@ -8,13 +8,23 @@
         android:orientation="vertical"
         android:padding="16dp">
         <TextView
+            android:id="@+id/ownfp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="点一台设备。指纹必须和你核对过的一致。变了就停止连接。" />
+            android:textIsSelectable="true" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="点一台设备。屏幕上的指纹必须和你核对过的一致。变了就停止连接。" />
         <ListView
             android:id="@+id/devices"
             android:layout_width="match_parent"
             android:layout_height="240dp" />
+        <Button
+            android:id="@+id/refresh"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="刷新设备" />
         <Button
             android:id="@+id/view"
             android:layout_width="match_parent"
