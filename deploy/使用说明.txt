@@ -1,0 +1,189 @@
+CyanDesk 服务器 0.1.4  linux/amd64
+
+这是可以拷到一台 Linux 服务器上运行的服务端包。它包含已经编译好的控制面、Rust 网关和管理页。
+它不是完整的远控成品。账号、设备批准和管理页可以先用。跨网络的稳定远程桌面、Windows 客户端实测、公网 NAT 都还没有完成。
+
+两种用法不要混在一起要求：
+
+1. 二进制模式。用包里的 bin/ 和 admin/。服务器上不需要安装 Go、Rust、Node。
+2. Docker 模式。用 deploy/compose.yaml 自己构建镜像。这一包的构建没有在出包的机器上跑过 Docker，不能把文件存在当成安装成功。构建需要能从 Docker Hub 拉取 rust:1.83-bookworm、golang:1.26-bookworm、node:22-bookworm、debian:bookworm-slim，并在构建时下载 Go 模块和 npm 包。网关源码没有第三方 crate。不要把这个包说成离线包。
+
+包里没有默认管理员密码。第一次启动会在数据目录生成 bootstrap.token 和 internal.token。只在服务器上读取。不要把内容贴到聊天、工单或截图里。日志只写请求路径和状态，不写这两份文件的内容。
+
+
+一、在 Windows 上把包放到 Linux 服务器
+
+在 Windows 上打开 PowerShell，把包传到你自己的服务器。下面的用户名和地址由你替换。这个说明不会替你登录任何机器。
+
+  scp cyandesk-server-0.1.4-linux-amd64.tar.gz 用户@服务器:/tmp/
+
+然后 SSH 到那台服务器：
+
+  ssh 用户@服务器
+  cd /tmp
+  tar -xzf cyandesk-server-0.1.4-linux-amd64.tar.gz
+  cd cyandesk-server-0.1.4-linux-amd64
+  sha256sum -c SHA256SUMS
+
+校验失败就不要继续。
+
+
+二、防火墙只开这三个口
+
+  13111/tcp    管理页、登录、设备 API、下载
+  13110/tcp    信令和中继
+  13110/udp    网关的 UDP
+
+不要对公网放开 13112。那是控制面和网关之间的票据接口，只监听 127.0.0.1。
+
+firewalld 示例：
+
+  sudo firewall-cmd --permanent --add-port=13111/tcp
+  sudo firewall-cmd --permanent --add-port=13110/tcp
+  sudo firewall-cmd --permanent --add-port=13110/udp
+  sudo firewall-cmd --reload
+
+ufw 示例：
+
+  sudo ufw allow 13111/tcp
+  sudo ufw allow 13110/tcp
+  sudo ufw allow 13110/udp
+
+云厂商安全组也要放行同样的三个口，仍然不要放行 13112。
+
+
+三、二进制模式启动
+
+先编辑 deploy/binary-start.sh 顶部的 DATA、LISTEN、CERT_HOSTS，或者在执行前导出同名变量。
+CERT_HOSTS 填客户端地址栏里会写的 IP 或域名。监听 0.0.0.0 时，证书不会自动包含这个通配地址。
+
+  chmod +x deploy/binary-start.sh deploy/binary-stop.sh deploy/binary-health.sh deploy/binary-backup.sh
+  DATA=/var/lib/cyandesk CERT_HOSTS="你的IP或域名" sh deploy/binary-start.sh
+
+第一次启动后，在服务器上看数据目录里的 control.log，找到这一行：
+
+  cert fingerprint: <64位十六进制>
+
+这是证书指纹，不是密码。引导文件在数据目录的 bootstrap.token。内部令牌在 internal.token，只给本机网关使用。
+
+健康检查：
+
+  sh deploy/binary-health.sh 127.0.0.1 13111
+
+live 和 ready 应各返回一行 JSON。公网端口上的票据核销地址应不是 200。
+
+停止时保留数据：
+
+  DATA=/var/lib/cyandesk sh deploy/binary-stop.sh
+
+备份：
+
+  DATA=/var/lib/cyandesk sh deploy/binary-backup.sh /root/cyandesk-backup.tar.gz
+
+备份里有数据库和密钥。留在服务器上。
+
+升级：先 stop，把数据目录另外复制一份，再替换 bin/cyandesk 和 bin/cyandesk-gateway，然后 start。
+回退：stop，把上一版的两个二进制拷回去，数据目录不动，再 start。
+卸载：stop。要删账号和证书时，自己删除数据目录。停止脚本不会删它。
+
+
+四、证书
+
+默认是程序第一次启动时生成的 ECDSA P-256 自签证书，大约两年。
+客户端会核对主机名和你执行 server trust 时保存的指纹。它不使用系统根证书。
+
+三种做法：
+
+1. 自签，适合先在自己的机器上用。启动前用 --cert-host 或 CERT_HOSTS 写上客户端要访问的 IP 或域名。浏览器会警告，这是预期的。管理页仍可用。把指纹和启动日志里的那一行核对。
+2. 你自己的证书。准备好包含正确 SAN 的 fullchain PEM 和私钥 PEM，然后：
+
+  ./bin/cyandesk control --data /var/lib/cyandesk --listen 0.0.0.0:13111 --internal 127.0.0.1:13112 --admin ./admin --tls-cert 证书.pem --tls-key 私钥.pem
+
+  启动日志里的 fingerprint 变成这张证书的 SHA-256。客户端要重新 server trust。数据目录里的设备签名密钥不会被这两份文件替换。
+3. 只监听 127.0.0.1。证书带 localhost 和 127.0.0.1。只能在服务器本机打开管理页。
+
+
+五、第一次登录
+
+浏览器打开 https://服务器:13111/ 。自签证书时，确认指纹和日志一致后再继续。
+页面上没有默认密码。第一次会要求引导凭据、账号和密码。
+账号 3 到 64 位。密码至少 12 位。引导凭据从服务器上的 bootstrap.token 读，粘到这个浏览器里即可，不要发到别处。
+
+命令行做同一件事时，密码和引导凭据都放在模式 0600 的文件里：
+
+  ./bin/cyandesk client --config ./admin-client server set https://服务器:13111
+  ./bin/cyandesk client --config ./admin-client server trust <指纹>
+  ./bin/cyandesk client --config ./admin-client bootstrap --user 你的账号 --password-file ./password.txt --token-file /var/lib/cyandesk/bootstrap.token
+  ./bin/cyandesk client --config ./admin-client login --user 你的账号 --password-file ./password.txt
+
+服务器地址的格式是 https://主机:13111 ，主机必须出现在证书里。
+
+
+六、设备和目前能用的客户端命令
+
+在每台客户端上分别 enroll。第一台设备可以由它自己的账号批准。之后的设备要由已经信任的设备执行 approve，并且必须带上你核对过的指纹。
+
+  ./bin/cyandesk client --config 目录 enroll --name 办公室主机
+  ./bin/cyandesk client --config 目录 devices
+  ./bin/cyandesk client --config 目录 approve 设备ID --fingerprint 指纹
+
+同一账号下的两台已信任设备可以直接发起会话。要让主机不在旁边点同意就接受连接，再执行：
+
+  ./bin/cyandesk client --config 主机配置 grant --host 主机设备ID --controller 主控设备ID --scope view,input --unattended
+
+主机如果要当场同意一次等待中的会话：
+
+  ./bin/cyandesk client --config 主机配置 consent 会话ID --scope view,input
+
+拒绝则加上 --deny。
+
+Linux 上还有：
+
+  ./bin/cyandesk agent --config 目录 --display "$DISPLAY" --width 1280 --height 720 --fps 15
+  ./bin/cyandesk connect --config 目录 --host 主机设备ID --fingerprint 指纹 --mode view
+
+没有 DISPLAY 时 agent 会退出，不会造一块假屏幕。--width、--height、--fps 只是采集参数，不是 1080p60 的测量结果。
+connect 目前在拨号时选定一条路径。丢包后在直连和中继之间迁移还没有接到这两条命令上。
+Windows 程序可以交叉编译，但没有在 Windows 上运行过。不要把那个压缩包当成已经能远控的完整客户端。
+
+管理页可以看用户、设备、会话和审计。管理员不能从管理页看屏幕。批准设备的指纹核对在客户端完成。
+
+
+七、Docker 模式（本包没有实测）
+
+在已经装好 Docker 的机器上，从本目录执行：
+
+  sh deploy/install.sh
+
+它会执行 docker compose -f deploy/compose.yaml up -d --build。
+镜像构建要联网拉取上面列出的基础镜像，并下载 Go 模块和 npm 依赖。
+Compose 发布 13111/tcp、13110/tcp、13110/udp。不发布 13112。
+数据在卷 cyandesk-data。引导文件在卷里的 bootstrap.token。安装脚本不打印它。
+
+停止并保留数据：
+
+  sh deploy/uninstall.sh
+
+连数据一起删才使用：
+
+  sh deploy/uninstall.sh --delete-data
+
+这一步没有在出包环境里跑过。二进制模式的健康检查不能代替它。
+
+
+八、文件
+
+  bin/cyandesk                 控制面，也带客户端子命令
+  bin/cyandesk-gateway         13110 的 Rust 网关
+  admin/                       已构建的管理页
+  config/commands.txt          与程序参数一致的命令模板
+  deploy/binary-start.sh       二进制启动
+  deploy/binary-stop.sh        二进制停止，保留数据
+  deploy/binary-health.sh      健康检查
+  deploy/binary-backup.sh      备份数据目录
+  deploy/Dockerfile            镜像构建
+  deploy/compose.yaml          Compose
+  deploy/install.sh            Docker 启动
+  deploy/uninstall.sh          Docker 停止
+  SHA256SUMS                   包内文件校验
+  VERSION                      0.1.4 linux/amd64

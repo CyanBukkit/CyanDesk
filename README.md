@@ -4,6 +4,8 @@
 
 设计原文在 `docs/design/CyanDesk-design-v0.1-approved.canvas.tsx`。做到哪一步写在 `docs/STATUS.md` 和 `docs/ACCEPTANCE.md`。
 
+要在一台 Linux 上跑服务端，用打好的包 `cyandesk-server-0.1.4-linux-amd64.tar.gz`。用法在包里的 `使用说明.txt`。二进制模式用包内的 `bin/cyandesk`、`bin/cyandesk-gateway` 和 `admin/`。Docker 模式见 `deploy/compose.yaml`，构建要联网，而且这次没有跑过。
+
 ## 本机运行
 
 需要 Go 1.26、Node 22 和 ffmpeg。

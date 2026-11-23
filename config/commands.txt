@@ -1,0 +1,21 @@
+# CyanDesk 0.1.4 服务器命令模板
+# 程序不读取这个文件。把地址改成你的以后，自己在 shell 里执行。
+# 这里没有密码，没有引导凭据，也没有内部令牌。
+
+# 控制面。13111 对外。13112 只绑在本机。
+# --cert-host 只在第一次生成证书时写入客户端将要访问的 IP 或域名。可重复。
+./bin/cyandesk control \
+  --data /var/lib/cyandesk \
+  --listen 0.0.0.0:13111 \
+  --internal 127.0.0.1:13112 \
+  --admin ./admin \
+  --cert-host 你的服务器IP或域名
+
+# 已有自己的证书时，用这两项替换监听证书。签名密钥仍留在数据目录。
+# ./bin/cyandesk control --data /var/lib/cyandesk --listen 0.0.0.0:13111 --internal 127.0.0.1:13112 --admin ./admin --tls-cert /path/fullchain.pem --tls-key /path/privkey.pem
+
+# 发布网关。同时监听 13110 的 TCP 和 UDP。
+./bin/cyandesk-gateway \
+  --listen 0.0.0.0:13110 \
+  --internal-url http://127.0.0.1:13112 \
+  --internal-token-file /var/lib/cyandesk/internal.token

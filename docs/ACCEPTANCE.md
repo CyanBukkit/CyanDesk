@@ -19,6 +19,6 @@
 | G 平台 | Win7/10/11、macOS、Android、Pico、Apple 仅主控、Linux 服务 | Linux 命令行已测试。Windows 10/11 的 GDI、SendInput、窗口和服务适配器已编进二进制，未在 Windows 上运行。Win7 是单独标签，未实现。其余平台未实现 | 见 `docs/STATUS.md` |
 | G 无头 Linux | 不伪造画面；文件路径不能逃出根目录 | 路径约束已测试。远程命令执行未实现 | `go test ./internal/files` |
 | H VR | SteamVR / ALVR | 未实现 | 许可证已归档，没有构建 |
-| I 安装 | 13110/13111、签名制品、卸载保留数据 | 13111 与 13110/TCP 已在本机监听测试。Docker 阻塞：没有 docker、podman、rootlesskit、slirp4netns 和套接字。Dockerfile 文本已核对，没有构建镜像。制品签名函数已测试 | `TestDockerfileAndCompose`；Compose 未运行 |
+| I 安装 | 13110/13111、签名制品、卸载保留数据 | 二进制服务器包已在本机启动，健康检查通过，13112 不在公网端口上。Docker 未测试，没有 compose up。制品签名函数已测试 | `deploy/binary-health.sh`；`TestDockerfileAndCompose` |
 
 安全上还没有做的：公网 NAT 类型矩阵、票据重放以外的完整攻击演练、更新安装器、平台签名。

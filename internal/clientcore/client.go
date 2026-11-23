@@ -425,6 +425,25 @@ func (p Profile) Sessions() ([]map[string]any, error) {
 	return out, nil
 }
 
+func (p Profile) Consent(id string, accept bool, scopes []string) error {
+	raw, err := json.Marshal(map[string]any{"accept": accept, "granted_scopes": scopes})
+	if err != nil {
+		return err
+	}
+	req, err := p.signed(http.MethodPost, "/api/v1/sessions/"+id+"/consent", raw)
+	if err != nil {
+		return err
+	}
+	code, body, err := p.doSigned(req)
+	if err != nil {
+		return err
+	}
+	if code != http.StatusOK {
+		return fmt.Errorf("同意失败 (%d): %v", code, body["error"])
+	}
+	return nil
+}
+
 func (p Profile) CloseSession(id string) error {
 	code, body, err := p.Call(http.MethodDelete, "/api/v1/sessions/"+id, nil, true)
 	if err != nil {

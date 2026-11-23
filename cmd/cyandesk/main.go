@@ -15,6 +15,7 @@ import (
 	"cyandesk/internal/clientcore"
 	"cyandesk/internal/edge"
 	"cyandesk/internal/gateway"
+	"cyandesk/internal/secret"
 )
 
 func main() {
@@ -39,7 +40,7 @@ func main() {
 	case "connect":
 		os.Exit(runConnect(os.Args[2:]))
 	case "version":
-		fmt.Println("cyandesk 0.1.3 protocol cyandesk/1")
+		fmt.Println("cyandesk 0.1.4 protocol cyandesk/1")
 	default:
 		usage()
 		os.Exit(2)
@@ -47,11 +48,11 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `CyanDesk 0.1.2
+	fmt.Fprint(os.Stderr, `CyanDesk 0.1.4
 
-  cyandesk control --data 目录 --listen :13111 --internal 127.0.0.1:13112
+  cyandesk control --data 目录 --listen 0.0.0.0:13111 --internal 127.0.0.1:13112 --admin 目录 [--cert-host 名称] [--tls-cert 证书 --tls-key 私钥]
+  cyandesk-gateway --listen 0.0.0.0:13110 --internal-url http://127.0.0.1:13112 --internal-token-file 文件
   cyandesk gateway --listen :13110 --internal-url http://127.0.0.1:13112 --internal-token-file 文件
-  cyandesk edge --listen :13111 --upstream http://127.0.0.1:13113 --admin 目录 --cert 证书 --key 私钥
   cyandesk client --config 目录 server set https://主机:13111
   cyandesk client --config 目录 server trust 指纹
   cyandesk client --config 目录 bootstrap --user 账号 --password-file 文件 --token-file 文件
@@ -59,11 +60,14 @@ func usage() {
   cyandesk client --config 目录 enroll --name 名称
   cyandesk client --config 目录 devices
   cyandesk client --config 目录 approve 设备ID --fingerprint 指纹
-  cyandesk agent --config 目录 --display :0
+  cyandesk client --config 目录 grant --host 主机ID --controller 主控ID --scope view,input [--unattended]
+  cyandesk client --config 目录 consent 会话ID --scope view,input [--deny]
+  cyandesk agent --config 目录 --display 显示 [--width 1280 --height 720 --fps 15]
   cyandesk connect --config 目录 --host 设备ID --fingerprint 指纹 --mode view|control
   cyandesk version
 
-密码只从文件读取，不接受命令行参数。13111 是管理入口，不提供执行命令的接口。
+不带参数会打印这段说明。密码只从文件读取。13111 是管理入口。13112 只给本机网关核销票据，不要公开。
+发布网关是 cyandesk-gateway。上面的 cyandesk gateway 只是对照程序。
 `)
 }
 
@@ -73,9 +77,22 @@ func runControl(args []string) int {
 	listen := fs.String("listen", "127.0.0.1:13111", "对外 HTTPS")
 	internal := fs.String("internal", "127.0.0.1:13112", "仅本机的票据接口")
 	admin := fs.String("admin", "", "管理页目录，可空")
+	tlsCert := fs.String("tls-cert", "", "替换监听证书 PEM")
+	tlsKey := fs.String("tls-key", "", "替换监听私钥 PEM")
+	var certHosts []string
+	fs.Func("cert-host", "首次生成证书时额外写入的 IP 或域名，可重复", func(v string) error {
+		certHosts = append(certHosts, v)
+		return nil
+	})
 	_ = fs.Parse(args)
+	if (*tlsCert == "") != (*tlsKey == "") {
+		fmt.Fprintln(os.Stderr, "tls-cert 和 tls-key 要一起给出")
+		return 2
+	}
 	host := hostOf(*listen)
-	env, err := boot.Open(*data, []string{host, "localhost", "127.0.0.1"})
+	hosts := []string{host, "localhost", "127.0.0.1"}
+	hosts = append(hosts, certHosts...)
+	env, err := boot.Open(*data, hosts)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -100,7 +117,27 @@ func runControl(args []string) int {
 		// The public handler already serves the API. Static files are mounted beside it.
 		handler = withStatic(srv.PublicHandler(), *admin)
 	}
-	cert, err := tls.X509KeyPair([]byte(env.Material.CertPEM), []byte(env.Material.KeyPEM))
+	certPEM := []byte(env.Material.CertPEM)
+	keyPEM := []byte(env.Material.KeyPEM)
+	fingerprint := env.Material.CertFingerprint
+	if *tlsCert != "" {
+		certPEM, err = os.ReadFile(*tlsCert)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		keyPEM, err = os.ReadFile(*tlsKey)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fingerprint, err = secret.FingerprintFromPEM(certPEM)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	}
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -113,7 +150,7 @@ func runControl(args []string) int {
 	go func() {
 		_ = http.ListenAndServe(*internal, srv.InternalHandler())
 	}()
-	fmt.Printf("cert fingerprint: %s\n", env.Material.CertFingerprint)
+	fmt.Printf("cert fingerprint: %s\n", fingerprint)
 	fmt.Printf("bootstrap token file: %s\n", env.BootstrapFile)
 	fmt.Printf("internal token file: %s\n", env.InternalFile)
 	fmt.Printf("listening https %s\n", ln.Addr())
@@ -345,6 +382,72 @@ func runClient(args []string) int {
 			return 1
 		}
 		fmt.Println("已信任这台设备")
+	case "grant":
+		hostID, ctrlID, scope := "", "", "view"
+		unattended := false
+		for i := 1; i < len(rest); i++ {
+			switch rest[i] {
+			case "--host":
+				i++
+				if i < len(rest) {
+					hostID = rest[i]
+				}
+			case "--controller":
+				i++
+				if i < len(rest) {
+					ctrlID = rest[i]
+				}
+			case "--scope":
+				i++
+				if i < len(rest) {
+					scope = rest[i]
+				}
+			case "--unattended":
+				unattended = true
+			default:
+				fmt.Fprintln(os.Stderr, "未知参数")
+				return 2
+			}
+		}
+		if hostID == "" || ctrlID == "" {
+			fmt.Fprintln(os.Stderr, "需要 --host 和 --controller")
+			return 2
+		}
+		if err := p.Grant(hostID, ctrlID, strings.Split(scope, ","), unattended); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Println("已写入授权")
+	case "consent":
+		if len(rest) < 2 {
+			usage()
+			return 2
+		}
+		scope := "view"
+		accept := true
+		for i := 2; i < len(rest); i++ {
+			switch rest[i] {
+			case "--scope":
+				i++
+				if i < len(rest) {
+					scope = rest[i]
+				}
+			case "--deny":
+				accept = false
+			default:
+				fmt.Fprintln(os.Stderr, "未知参数")
+				return 2
+			}
+		}
+		if err := p.Consent(rest[1], accept, strings.Split(scope, ",")); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if accept {
+			fmt.Println("主机已同意这次连接")
+		} else {
+			fmt.Println("主机已拒绝这次连接")
+		}
 	case "status":
 		fmt.Printf("服务器 %s\n指纹 %s\n账号 %s\n设备 %s\n", p.ServerURL, p.Fingerprint, p.LoginName, p.DeviceID)
 	default:

@@ -1,0 +1,9 @@
+.git
+bin
+data
+admin-web/node_modules
+admin-web/dist
+gateway-rs/target
+**/*.db
+**/*.db-wal
+**/*.db-shm
