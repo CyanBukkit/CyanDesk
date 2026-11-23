@@ -21,7 +21,7 @@ class DeviceActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.devices)
-        val names = arrayOf("已信任的设备会列在这里")
+        val names = intent.getStringArrayExtra("labels") ?: arrayOf("没有设备")
         findViewById<ListView>(R.id.devices).adapter =
             ArrayAdapter(this, android.R.layout.simple_list_item_1, names)
         findViewById<Button>(R.id.view).setOnClickListener { choose(SessionMode.VIEW) }
