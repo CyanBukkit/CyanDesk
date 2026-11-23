@@ -1,4 +1,5 @@
 /bin/
+/gateway-rs/target/
 /data/
 /admin-web/node_modules/
 /admin-web/dist/
