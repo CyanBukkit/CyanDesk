@@ -22,6 +22,7 @@ func runAgent(args []string) int {
 func runAgentContext(ctx context.Context, args []string) int {
 	config, display := "", os.Getenv("DISPLAY")
 	allowUpgrade := false
+	directBind, directAdvertise := "", ""
 	width, height, fps := 1280, 720, 15
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -46,6 +47,16 @@ func runAgentContext(ctx context.Context, args []string) int {
 			fps, _ = strconv.Atoi(args[i])
 		case "--allow-upgrade":
 			allowUpgrade = true
+		case "--direct-bind":
+			i++
+			if i < len(args) {
+				directBind = args[i]
+			}
+		case "--direct-advertise":
+			i++
+			if i < len(args) {
+				directAdvertise = args[i]
+			}
 		default:
 			fmt.Fprintln(os.Stderr, "未知参数")
 			return 2
@@ -88,7 +99,10 @@ func runAgentContext(ctx context.Context, args []string) int {
 				continue
 			}
 			id, _ := sess["id"].(string)
-			if err := serveOne(profile, id, display, allowUpgrade, width, height, fps); err != nil && err != desktop.ErrRevoked {
+			err := serveOne(profile, id, display, allowUpgrade, width, height, fps, directBind, directAdvertise)
+			if err == desktop.ErrRevoked {
+				fmt.Println("授权已撤销，会话结束")
+			} else if err != nil && err != context.Canceled {
 				fmt.Fprintln(os.Stderr, "会话结束")
 			}
 		}
@@ -109,7 +123,7 @@ func sleepOrDone(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-func serveOne(profile clientcore.Profile, sessionID, display string, allowUpgrade bool, width, height, fps int) error {
+func serveOne(profile clientcore.Profile, sessionID, display string, allowUpgrade bool, width, height, fps int, directBind, directAdvertise string) error {
 	state, ticket, err := profile.SessionTicket(sessionID)
 	if err != nil || state != "active" || ticket == "" {
 		return err
@@ -140,7 +154,7 @@ func serveOne(profile clientcore.Profile, sessionID, display string, allowUpgrad
 		return err
 	}
 	ctx := context.Background()
-	link, err := desktop.OpenAuthorized(ctx, gatewayFrom(profile), protocol.RoleHost, ticket, pinned, fp, noiseKey, self)
+	link, err := desktop.OpenAuthorized(ctx, gatewayFrom(profile), protocol.RoleHost, ticket, pinned, fp, noiseKey, self, desktopDirect(directBind, directAdvertise))
 	if err != nil {
 		return err
 	}
@@ -164,6 +178,7 @@ func serveOne(profile clientcore.Profile, sessionID, display string, allowUpgrad
 
 func runConnect(args []string) int {
 	config, hostID, mode, pin := "", "", "view", ""
+	directBind, directAdvertise := "", ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--config":
@@ -178,6 +193,12 @@ func runConnect(args []string) int {
 		case "--fingerprint":
 			i++
 			pin = args[i]
+		case "--direct-bind":
+			i++
+			directBind = args[i]
+		case "--direct-advertise":
+			i++
+			directAdvertise = args[i]
 		default:
 			fmt.Fprintln(os.Stderr, "未知参数")
 			return 2
@@ -222,7 +243,7 @@ func runConnect(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	link, err := desktop.OpenAuthorized(ctx, gatewayFrom(profile), protocol.RoleController, ticket, pin, fp, noiseKey, self)
+	link, err := desktop.OpenAuthorized(ctx, gatewayFrom(profile), protocol.RoleController, ticket, pin, fp, noiseKey, self, desktopDirect(directBind, directAdvertise))
 	if err != nil {
 		_ = profile.CloseSession(sessionID)
 		fmt.Fprintln(os.Stderr, "连接失败")
@@ -277,6 +298,14 @@ func readViewerInput(view *viewer, link interface {
 	}
 }
 
+func desktopDirect(bind, advertise string) desktop.Direct {
+	return desktop.Direct{Bind: bind, Advertise: advertise}
+}
+
 func gatewayFrom(p clientcore.Profile) string {
-	return "127.0.0.1:13110"
+	addr, err := p.GatewayAddr()
+	if err != nil || addr == "" {
+		return "127.0.0.1:13110"
+	}
+	return addr
 }

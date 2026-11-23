@@ -40,6 +40,19 @@ type Result struct {
 	send     func([]byte) error
 	recv     func() ([]byte, error)
 	close    func()
+	current  func() string
+}
+
+func (r *Result) Current() string {
+	if r != nil && r.current != nil {
+		if name := r.current(); name != "" {
+			return name
+		}
+	}
+	if r == nil {
+		return ""
+	}
+	return r.Selected
 }
 
 func (r *Result) Send(app byte, payload []byte) error {

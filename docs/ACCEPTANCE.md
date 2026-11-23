@@ -9,7 +9,7 @@
 | B 私有网络候选 | 两个命名空间，延迟中继与直连 UDP 同时测量 | 已测试。这是私有实验网，不是公网 NAT，也不作性能结果 | `TestPrivateNetworkCandidates` |
 | B 模拟 NAT | 命名空间内用户态改写源地址 | 已测试。不是内核 NAT，不是公网 NAT | `TestEmulatedUserspaceNAT` |
 | B 公网 NAT | 真实运营商 NAT | 未测试，缺公网环境 | 无 |
-| C 迁移与输入去重 | 活动会话从直连 UDP 迁到中继再迁回；乱序只注入一次 | 已测试，网络是本机 UDP。丢包后的直连是重新握手。`agent` 命令还没有接上 | `TestLiveUDPMigration` |
+| C 迁移与输入去重 | 活动会话从直连 UDP 迁到中继再迁回；乱序只注入一次 | 已测试。编译后的 agent 和 connect 在本机通过 Rust 网关完成迁移、点击和撤销。丢包不重新握手。公网没有测 | `TestExecutableAgentMigratesThroughRustGateway` |
 | D 画质 | 预设与弱网矩阵 | 未实现测量。H.264 单帧往返已测试 | `go test ./internal/media` |
 | E 只观看 / 升级 | 主机拒绝注入，拒绝未授权的控制升级 | 已测试（持续会话） | `TestContinuousRemoteDesktop` |
 | E 管理员不能观看 | 管理接口无画面 | 已实现。管理列表不含票据 | API 测试与管理页 |

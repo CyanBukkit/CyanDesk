@@ -90,11 +90,11 @@ func hostRead(ctx context.Context, link Link, cfg HostConfig) error {
 			}
 			switch payload[0] {
 			case PolicyView:
-				cfg.Gate.AllowInput = false
+				cfg.Gate.SetAllow(false)
 				_ = link.Send(protocol.AppInputAck, []byte{PolicyView})
 			case PolicyControl:
 				if cfg.GrantedInput && cfg.AllowUpgrade {
-					cfg.Gate.AllowInput = true
+					cfg.Gate.SetAllow(true)
 					_ = link.Send(protocol.AppInputAck, []byte{PolicyControl})
 				} else {
 					if cfg.InputsRejected != nil {
@@ -118,6 +118,7 @@ func hostSend(ctx context.Context, link Link, cfg HostConfig) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-tick.C:
+			cfg.Gate.Expire(time.Now(), 200*time.Millisecond, cfg.Inject)
 			if cfg.Alive != nil && !cfg.Alive() {
 				return ErrRevoked
 			}

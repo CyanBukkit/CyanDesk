@@ -39,8 +39,10 @@ func main() {
 		os.Exit(runService(os.Args[2:]))
 	case "connect":
 		os.Exit(runConnect(os.Args[2:]))
+	case "gui":
+		os.Exit(runGUI(os.Args[2:]))
 	case "version":
-		fmt.Println("cyandesk 0.1.4 protocol cyandesk/1")
+		fmt.Println("cyandesk 0.1.5 protocol cyandesk/1")
 	default:
 		usage()
 		os.Exit(2)
@@ -48,9 +50,9 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `CyanDesk 0.1.4
+	fmt.Fprint(os.Stderr, `CyanDesk 0.1.5
 
-  cyandesk control --data 目录 --listen 0.0.0.0:13111 --internal 127.0.0.1:13112 --admin 目录 [--cert-host 名称] [--tls-cert 证书 --tls-key 私钥]
+  cyandesk control --data 目录 --listen 0.0.0.0:13111 --internal 127.0.0.1:13112 --admin 目录 [--cert-host 名称] [--gateway-advertise 主机:13110] [--tls-cert 证书 --tls-key 私钥]
   cyandesk-gateway --listen 0.0.0.0:13110 --internal-url http://127.0.0.1:13112 --internal-token-file 文件
   cyandesk gateway --listen :13110 --internal-url http://127.0.0.1:13112 --internal-token-file 文件
   cyandesk client --config 目录 server set https://主机:13111
@@ -63,7 +65,8 @@ func usage() {
   cyandesk client --config 目录 grant --host 主机ID --controller 主控ID --scope view,input [--unattended]
   cyandesk client --config 目录 consent 会话ID --scope view,input [--deny]
   cyandesk agent --config 目录 --display 显示 [--width 1280 --height 720 --fps 15]
-  cyandesk connect --config 目录 --host 设备ID --fingerprint 指纹 --mode view|control
+  cyandesk connect --config 目录 --host 设备ID --fingerprint 指纹 --mode view|control [--direct-advertise 地址:端口]
+  cyandesk gui
   cyandesk version
 
 不带参数会打印这段说明。密码只从文件读取。13111 是管理入口。13112 只给本机网关核销票据，不要公开。
@@ -79,6 +82,7 @@ func runControl(args []string) int {
 	admin := fs.String("admin", "", "管理页目录，可空")
 	tlsCert := fs.String("tls-cert", "", "替换监听证书 PEM")
 	tlsKey := fs.String("tls-key", "", "替换监听私钥 PEM")
+	gatewayAdvertise := fs.String("gateway-advertise", "", "向客户端公布的网关 host:port")
 	var certHosts []string
 	fs.Func("cert-host", "首次生成证书时额外写入的 IP 或域名，可重复", func(v string) error {
 		certHosts = append(certHosts, v)
@@ -104,8 +108,14 @@ func runControl(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	srv.GatewayTCP = host + ":13110"
-	srv.GatewayUDP = host + ":13110"
+	gw := net.JoinHostPort(host, "13110")
+	if *gatewayAdvertise != "" {
+		gw = *gatewayAdvertise
+	} else if len(certHosts) > 0 {
+		gw = net.JoinHostPort(certHosts[0], "13110")
+	}
+	srv.GatewayTCP = gw
+	srv.GatewayUDP = gw
 	var handler http.Handler = srv.PublicHandler()
 	if *admin != "" {
 		h, err := edge.Handler("http://"+*internal, *admin)

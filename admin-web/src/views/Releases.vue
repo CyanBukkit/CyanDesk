@@ -5,7 +5,7 @@ import { api } from "../api";
 type Release = { artifact_id: string; version: string; os: string; arch: string; status: string; sha256: string; signature: string };
 const releases = ref<Release[]>([]);
 const error = ref("");
-const version = ref("0.1.0");
+const version = ref("0.1.5");
 const channel = ref("stable");
 const osName = ref("linux");
 const arch = ref("amd64");

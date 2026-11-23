@@ -12,9 +12,12 @@ import (
 	"github.com/flynn/noise"
 )
 
+// Direct is the optional UDP address selection for OpenLive.
+type Direct = remote.Direct
+
 // OpenAuthorized checks the pinned fingerprint and the ticket's noise key, then
 // opens the encrypted path. A demo flag cannot skip this.
-func OpenAuthorized(ctx context.Context, gatewayAddr string, role byte, ticket, pinnedFingerprint, recordFingerprint, recordNoise string, static noise.DHKey) (*remote.Result, error) {
+func OpenAuthorized(ctx context.Context, gatewayAddr string, role byte, ticket, pinnedFingerprint, recordFingerprint, recordNoise string, static noise.DHKey, direct remote.Direct) (*remote.Result, error) {
 	info, err := ParseTicket(ticket)
 	if err != nil {
 		return nil, err
@@ -33,10 +36,10 @@ func OpenAuthorized(ctx context.Context, gatewayAddr string, role byte, ticket, 
 			return nil, err
 		}
 	}
-	return remote.Open(ctx, remote.Side{
+	return remote.OpenLive(ctx, remote.Side{
 		Gateway: gatewayAddr, Role: role, Ticket: ticket, Static: static, PeerStatic: peerStatic,
 		Prologue: e2ee.Prologue(info.SessionID, info.Nonce, strings.Join(info.Scopes, ","), info.HostNoise, info.ControllerNoise),
-	})
+	}, direct)
 }
 
 func decodeNoise(s string) ([]byte, error) {

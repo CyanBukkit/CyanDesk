@@ -2,11 +2,11 @@
 
 日期：2026-11-23（北京时间）。对照的是已批准的设计 v0.1。下面只记录代码现状，不改设计原文。
 
-## 服务器包 0.1.4
+## 0.1.5
 
-Linux amd64 服务器包是 `cyandesk-server-0.1.4-linux-amd64.tar.gz`。里面有编译好的控制面、Rust 网关和已构建的管理页，以及 Dockerfile 和 Compose。二进制模式在本机用隔离端口做过健康检查。Docker 构建和 `compose up` 没有跑，不能写成安装成功。镜像构建需要从 Docker Hub 拉取基础镜像，并下载 Go 模块和 npm 包，不是离线包。
+`agent` 和 `connect` 会同时打开已认证的中继和直连 UDP。`TestExecutableAgentMigratesThroughRustGateway` 用编译出的程序、Xvfb、颜色窗口和 Rust 网关测过：先走上直连，打断直连后画面和点击改走中继，恢复后再迁回，关闭会话后主机打印授权撤销。直连 UDP 使用显式 nonce 的 Noise 数据报，丢包不重新握手。
 
-`agent` / `connect` 仍然在拨号时只留一条路径。活动会话迁移还在库测试里，没有接到这两条命令。
+服务器包是 `cyandesk-server-0.1.5-linux-amd64.tar.gz`。Docker 构建这次没有跑。Windows 的 `cyandesk gui` 已交叉编译，没有在 Windows 上运行。公网 NAT 没有测。
 
 这是可编译、可测试的桌面会话原型，不是 12 月 1 日前的完整软件，也不是各平台稳定版。
 

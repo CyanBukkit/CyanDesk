@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -442,6 +443,45 @@ func (p Profile) Consent(id string, accept bool, scopes []string) error {
 		return fmt.Errorf("同意失败 (%d): %v", code, body["error"])
 	}
 	return nil
+}
+
+// GatewayAddr reads the TCP gateway from server-info. A loopback advertisement
+// is rewritten to the host already used for the API, so a client is not sent
+// back to its own machine.
+func (p Profile) GatewayAddr() (string, error) {
+	code, body, err := p.Call(http.MethodGet, "/api/v1/server-info", nil, false)
+	if err != nil {
+		return "", err
+	}
+	if code != http.StatusOK {
+		return "", fmt.Errorf("服务器信息失败 (%d)", code)
+	}
+	raw, _ := body["endpoints"].([]any)
+	advertised := ""
+	for _, item := range raw {
+		m, _ := item.(map[string]any)
+		if m["proto"] == "tcp" {
+			advertised, _ = m["addr"].(string)
+			break
+		}
+	}
+	if advertised == "" {
+		return "", errors.New("服务器没有公布网关地址")
+	}
+	u, err := url.Parse(p.ServerURL)
+	if err != nil {
+		return advertised, nil
+	}
+	host, port, err := net.SplitHostPort(advertised)
+	if err != nil {
+		return advertised, nil
+	}
+	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" || host == "::1" {
+		if u.Hostname() != "" && u.Hostname() != host {
+			return net.JoinHostPort(u.Hostname(), port), nil
+		}
+	}
+	return advertised, nil
 }
 
 func (p Profile) CloseSession(id string) error {

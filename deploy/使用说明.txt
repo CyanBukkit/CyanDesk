@@ -1,7 +1,7 @@
-CyanDesk 服务器 0.1.4  linux/amd64
+CyanDesk 服务器 0.1.5  linux/amd64
 
 这是可以拷到一台 Linux 服务器上运行的服务端包。它包含已经编译好的控制面、Rust 网关和管理页。
-它不是完整的远控成品。账号、设备批准和管理页可以先用。跨网络的稳定远程桌面、Windows 客户端实测、公网 NAT 都还没有完成。
+它不是完整的远控成品。账号、设备批准和管理页可以先用。Linux 上的 agent 和 connect 会同时保留中继和直连 UDP，丢包后改走已经认证的 Rust 网关，恢复后按迟滞迁回。这一行为在出包机器上用编译好的程序、Xvfb 和 Rust 网关测过。公网 NAT 没有测。Windows 图形窗口没有在 Windows 上运行过。
 
 两种用法不要混在一起要求：
 
@@ -15,14 +15,14 @@ CyanDesk 服务器 0.1.4  linux/amd64
 
 在 Windows 上打开 PowerShell，把包传到你自己的服务器。下面的用户名和地址由你替换。这个说明不会替你登录任何机器。
 
-  scp cyandesk-server-0.1.4-linux-amd64.tar.gz 用户@服务器:/tmp/
+  scp cyandesk-server-0.1.5-linux-amd64.tar.gz 用户@服务器:/tmp/
 
 然后 SSH 到那台服务器：
 
   ssh 用户@服务器
   cd /tmp
-  tar -xzf cyandesk-server-0.1.4-linux-amd64.tar.gz
-  cd cyandesk-server-0.1.4-linux-amd64
+  tar -xzf cyandesk-server-0.1.5-linux-amd64.tar.gz
+  cd cyandesk-server-0.1.5-linux-amd64
   sha256sum -c SHA256SUMS
 
 校验失败就不要继续。
@@ -143,8 +143,7 @@ Linux 上还有：
   ./bin/cyandesk connect --config 目录 --host 主机设备ID --fingerprint 指纹 --mode view
 
 没有 DISPLAY 时 agent 会退出，不会造一块假屏幕。--width、--height、--fps 只是采集参数，不是 1080p60 的测量结果。
-connect 目前在拨号时选定一条路径。丢包后在直连和中继之间迁移还没有接到这两条命令上。
-Windows 程序可以交叉编译，但没有在 Windows 上运行过。不要把那个压缩包当成已经能远控的完整客户端。
+agent 和 connect 现在会同时保留中继 TCP 和直连 UDP。直连丢包后画面和输入改走网关，不因为单个丢包重新握手。Windows 上的 cyandesk.exe gui 有登录、设备列表、观看和控制按钮，但没有在 Windows 上打开过。
 
 管理页可以看用户、设备、会话和审计。管理员不能从管理页看屏幕。批准设备的指纹核对在客户端完成。
 
