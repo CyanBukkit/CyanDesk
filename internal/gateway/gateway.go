@@ -189,6 +189,7 @@ func (s *Server) maybeReady(p *pair) {
 
 func (s *Server) readLoop(p *pair, role byte, lk *link) {
 	defer lk.conn.Close()
+	defer s.closeOther(p, role)
 	defer s.detach(p, role)
 	for {
 		fr, err := protocol.ReadFrame(lk.conn)
@@ -221,6 +222,16 @@ func (s *Server) readLoop(p *pair, role byte, lk *link) {
 			return
 		}
 	}
+}
+
+func (s *Server) closeOther(p *pair, role byte) {
+	other := s.other(p, role)
+	if other == nil {
+		return
+	}
+	other.mu.Lock()
+	_ = other.conn.Close()
+	other.mu.Unlock()
 }
 
 func (s *Server) other(p *pair, role byte) *link {

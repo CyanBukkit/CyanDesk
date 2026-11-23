@@ -32,8 +32,12 @@ func main() {
 		os.Exit(runEdge(os.Args[2:]))
 	case "client":
 		os.Exit(runClient(os.Args[2:]))
+	case "agent":
+		os.Exit(runAgent(os.Args[2:]))
+	case "connect":
+		os.Exit(runConnect(os.Args[2:]))
 	case "version":
-		fmt.Println("cyandesk 0.1.0 protocol cyandesk/1")
+		fmt.Println("cyandesk 0.1.1 protocol cyandesk/1")
 	default:
 		usage()
 		os.Exit(2)
@@ -41,7 +45,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `CyanDesk 0.1.0
+	fmt.Fprint(os.Stderr, `CyanDesk 0.1.1
 
   cyandesk control --data 目录 --listen :13111 --internal 127.0.0.1:13112
   cyandesk gateway --listen :13110 --internal-url http://127.0.0.1:13112 --internal-token-file 文件
@@ -53,6 +57,8 @@ func usage() {
   cyandesk client --config 目录 enroll --name 名称
   cyandesk client --config 目录 devices
   cyandesk client --config 目录 approve 设备ID --fingerprint 指纹
+  cyandesk agent --config 目录 --display :0
+  cyandesk connect --config 目录 --host 设备ID --fingerprint 指纹 --mode view|control
   cyandesk version
 
 密码只从文件读取，不接受命令行参数。13111 是管理入口，不提供执行命令的接口。
@@ -328,6 +334,10 @@ func runClient(args []string) int {
 			return 2
 		}
 		if err := p.Approve(id, fp); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if err := p.Save(*config); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}

@@ -267,7 +267,18 @@ func (s *Store) migrate() error {
 	}
 	_, err := s.db.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES (1, ?)
 		ON CONFLICT(version) DO NOTHING`, now())
-	return err
+	if err != nil {
+		return err
+	}
+	for _, q := range []string{
+		`ALTER TABLE remote_sessions ADD COLUMN relay_ticket TEXT`,
+		`ALTER TABLE remote_sessions ADD COLUMN ticket_expires TEXT`,
+	} {
+		if _, alterErr := s.db.Exec(q); alterErr != nil && !strings.Contains(alterErr.Error(), "duplicate column") {
+			return alterErr
+		}
+	}
+	return nil
 }
 
 func now() string { return time.Now().UTC().Format(time.RFC3339Nano) }
@@ -1032,4 +1043,42 @@ func (s *Store) Release(id string) (Release, error) {
 
 func (s *Store) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
+}
+
+func (s *Store) JTIUsed(hash string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM used_jti WHERE jti_hash=?`, hash).Scan(&n)
+	return n > 0, err
+}
+
+func (s *Store) RelayTicket(id string) (raw, hash, exp string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var ticket, jti, expires sql.NullString
+	err = s.db.QueryRow(`SELECT relay_ticket, ticket_jti_hash, ticket_expires FROM remote_sessions WHERE id=?`, id).Scan(&ticket, &jti, &expires)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", "", ErrNotFound
+	}
+	if err != nil {
+		return "", "", "", err
+	}
+	if ticket.Valid {
+		raw = ticket.String
+	}
+	if jti.Valid {
+		hash = jti.String
+	}
+	if expires.Valid {
+		exp = expires.String
+	}
+	return raw, hash, exp, nil
+}
+
+func (s *Store) SaveRelayTicket(id, raw, hash, exp string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`UPDATE remote_sessions SET relay_ticket=?, ticket_jti_hash=?, ticket_expires=? WHERE id=?`, raw, hash, exp, id)
+	return err
 }

@@ -18,8 +18,8 @@
 - [ ] WP1 RustDesk / Win7 / Apple / Pico / ALVR 真机探针
 - [x] WP2 账号、信任、ACL、审计（单机测试）
 - [ ] WP3 Docker/TLS/管理后台的空机恢复（TLS、后台和 API 已有；空机 Docker 恢复未跑）
-- [ ] WP4 引擎桥接与可持续远控（有一帧真实图像和 X11 探针，没有可长期使用的 agent/connect 命令，也没有 RustDesk）
-- [ ] WP5 13110 的真实网络迁移、输入去重进会话、限额压测（策略和配额字段已有，迁移未在丢包网络里测）
+- [ ] WP4 引擎桥接与可持续远控（本机 X11 持续会话和 agent/connect 已测；没有 RustDesk，也没有长期弱网运行数据）
+- [ ] WP5 13110 的真实网络迁移、UDP 打洞、限额压测（本机断线重连和输入去重已测；NAT 未测）
 - [ ] WP6 高画质与 L1/L2/L3
 - [ ] WP7 各操作系统服务、CLI 图形、移动端、Apple、Win7
 - [ ] WP8 ALVR

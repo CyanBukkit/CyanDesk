@@ -5,11 +5,11 @@
 | 组 | 要求 | 状态 | 证据 |
 |---|---|---|---|
 | A 账号 | 初始化、登录、设备待批准、撤销、刷新重用、日志无秘密 | 已测试 | `go test ./internal/api ./internal/clientcore`，以及本机 CLI 日志 |
-| B 连接 | 中继与直连并行，按探测选路，无票据拒绝 | 已测试（仅本机 TCP） | `go test ./internal/gateway ./internal/remote` |
-| B UDP | 等长 cookie | 已测试（仅 127.0.0.1） | `go test ./internal/punch` |
-| C 迁移与输入去重 | 迟滞策略与重复序号 | 策略已测试；真实网络迁移未实现 | `go test ./internal/link ./internal/input` |
+| B 连接 | 中继与直连并行，按探测选路，无票据拒绝 | 已测试（仅本机 TCP，不是 NAT） | `go test ./internal/gateway ./internal/remote ./internal/desktop` |
+| B UDP / NAT | 打洞、等长 cookie、UDP 中继 | cookie 只在 127.0.0.1 测过。打洞和 NAT 未实现 | `go test ./internal/punch` |
+| C 迁移与输入去重 | 断线重连不重复注入；迟滞 | 本机断线重连已测试。公网迁移未实现 | `TestContinuousRemoteDesktop` |
 | D 画质 | 预设与弱网矩阵 | 未实现测量。H.264 单帧往返已测试 | `go test ./internal/media` |
-| E 只观看 | 主机拒绝注入 | 已测试（X11） | `go test ./internal/capture` |
+| E 只观看 / 升级 | 主机拒绝注入，拒绝未授权的控制升级 | 已测试（持续会话） | `TestContinuousRemoteDesktop` |
 | E 管理员不能观看 | 管理接口无画面 | 已实现。管理列表不含票据 | API 测试与管理页 |
 | F L1 | 裁剪坐标 | 仅数学函数已测试 | `go test ./internal/display` |
 | F L2 | 真实多屏 | 只在 Xvfb 上看到一块屏 | `ListScreens` |

@@ -42,6 +42,7 @@ const (
 	AppFileData
 	AppReject
 	AppHello
+	AppPolicy
 )
 
 var (

@@ -28,19 +28,20 @@ import (
 
 // Profile is the on-disk client state. Private keys stay in this directory at mode 0600.
 type Profile struct {
-	ServerURL    string `json:"server_url"`
-	ServerID     string `json:"server_id,omitempty"`
-	Fingerprint  string `json:"fingerprint,omitempty"`
-	AccessToken  string `json:"access_token,omitempty"`
-	RefreshToken string `json:"refresh_token,omitempty"`
-	UserID       string `json:"user_id,omitempty"`
-	LoginName    string `json:"login_name,omitempty"`
-	DeviceID     string `json:"device_id,omitempty"`
-	PublicKey    string `json:"public_key,omitempty"`
-	PrivateKey   string `json:"private_key,omitempty"`
-	NoisePublic  string `json:"noise_public,omitempty"`
-	NoisePrivate string `json:"noise_private,omitempty"`
-	DeviceFP     string `json:"device_fingerprint,omitempty"`
+	ServerURL    string            `json:"server_url"`
+	ServerID     string            `json:"server_id,omitempty"`
+	Fingerprint  string            `json:"fingerprint,omitempty"`
+	AccessToken  string            `json:"access_token,omitempty"`
+	RefreshToken string            `json:"refresh_token,omitempty"`
+	UserID       string            `json:"user_id,omitempty"`
+	LoginName    string            `json:"login_name,omitempty"`
+	DeviceID     string            `json:"device_id,omitempty"`
+	PublicKey    string            `json:"public_key,omitempty"`
+	PrivateKey   string            `json:"private_key,omitempty"`
+	NoisePublic  string            `json:"noise_public,omitempty"`
+	NoisePrivate string            `json:"noise_private,omitempty"`
+	DeviceFP     string            `json:"device_fingerprint,omitempty"`
+	Pins         map[string]string `json:"pins,omitempty"`
 }
 
 func Load(dir string) (Profile, error) {
@@ -258,7 +259,7 @@ func (p Profile) Devices() ([]map[string]any, error) {
 	return out, nil
 }
 
-func (p Profile) Approve(id, fingerprint string) error {
+func (p *Profile) Approve(id, fingerprint string) error {
 	payload := map[string]string{"confirm_fingerprint": fingerprint}
 	code, body, err := p.Call(http.MethodPost, "/api/v1/devices/"+id+"/approve", payload, true)
 	if err != nil {
@@ -279,6 +280,10 @@ func (p Profile) Approve(id, fingerprint string) error {
 	if code != http.StatusOK {
 		return fmt.Errorf("批准失败 (%d): %v", code, body["error"])
 	}
+	if p.Pins == nil {
+		p.Pins = map[string]string{}
+	}
+	p.Pins[id] = fingerprint
 	return nil
 }
 
@@ -323,6 +328,111 @@ func (p Profile) doSigned(req *http.Request) (int, map[string]any, error) {
 	var out map[string]any
 	_ = json.Unmarshal(buf, &out)
 	return res.StatusCode, out, nil
+}
+
+func (p Profile) Grant(hostID, controllerID string, scopes []string, unattended bool) error {
+	code, body, err := p.Call(http.MethodPut, "/api/v1/devices/"+hostID+"/grants", map[string]any{
+		"controller_id": controllerID, "scopes": scopes, "unattended": unattended, "policy_version": 0,
+	}, true)
+	if err != nil {
+		return err
+	}
+	if code != http.StatusOK {
+		return fmt.Errorf("授权失败 (%d): %v", code, body["error"])
+	}
+	return nil
+}
+
+func (p Profile) CreateSession(hostID string, scopes []string) (sessionID, ticket string, granted []any, err error) {
+	raw, err := json.Marshal(map[string]any{
+		"host_id": hostID, "controller_id": p.DeviceID, "requested_scopes": scopes, "nonce": strconv.FormatInt(time.Now().UnixNano(), 10),
+	})
+	if err != nil {
+		return "", "", nil, err
+	}
+	req, err := p.signed(http.MethodPost, "/api/v1/sessions", raw)
+	if err != nil {
+		return "", "", nil, err
+	}
+	code, body, err := p.doSigned(req)
+	if err != nil {
+		return "", "", nil, err
+	}
+	if code != http.StatusCreated {
+		return "", "", nil, fmt.Errorf("会话失败 (%d): %v", code, body["error"])
+	}
+	sessionID, _ = body["session_id"].(string)
+	ticket, _ = body["ticket"].(string)
+	granted, _ = body["granted_scopes"].([]any)
+	if ticket == "" {
+		return sessionID, "", granted, errors.New("会话还没有票据，主机尚未同意")
+	}
+	return sessionID, ticket, granted, nil
+}
+
+func (p Profile) Session(id string) (state, ticket string, err error) {
+	return p.session(id, false)
+}
+
+func (p Profile) SessionTicket(id string) (state, ticket string, err error) {
+	return p.session(id, true)
+}
+
+func (p Profile) session(id string, ticket bool) (state, raw string, err error) {
+	path := "/api/v1/sessions/" + id
+	if ticket {
+		path += "?ticket=1"
+	}
+	code, body, err := p.Call(http.MethodGet, path, nil, true)
+	if err != nil {
+		return "", "", err
+	}
+	if code != http.StatusOK {
+		return "", "", fmt.Errorf("读取会话失败 (%d): %v", code, body["error"])
+	}
+	state, _ = body["state"].(string)
+	raw, _ = body["ticket"].(string)
+	return state, raw, nil
+}
+
+func (p Profile) Sessions() ([]map[string]any, error) {
+	code, body, err := p.Call(http.MethodGet, "/api/v1/sessions", nil, true)
+	if err != nil {
+		return nil, err
+	}
+	if code != http.StatusOK {
+		return nil, fmt.Errorf("读取会话失败 (%d): %v", code, body["error"])
+	}
+	raw, _ := body["sessions"].([]any)
+	out := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		if m, ok := item.(map[string]any); ok {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+func (p Profile) CloseSession(id string) error {
+	code, body, err := p.Call(http.MethodDelete, "/api/v1/sessions/"+id, nil, true)
+	if err != nil {
+		return err
+	}
+	if code != http.StatusOK {
+		return fmt.Errorf("结束会话失败 (%d): %v", code, body["error"])
+	}
+	return nil
+}
+
+func (p Profile) Device(id string) (map[string]any, error) {
+	code, body, err := p.Call(http.MethodGet, "/api/v1/devices/"+id, nil, true)
+	if err != nil {
+		return nil, err
+	}
+	if code != http.StatusOK {
+		return nil, fmt.Errorf("读取设备失败 (%d): %v", code, body["error"])
+	}
+	return body, nil
 }
 
 func (p Profile) NoiseKey() (noise.DHKey, error) {

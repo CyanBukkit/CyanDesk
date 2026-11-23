@@ -34,6 +34,16 @@ CGO_ENABLED=0 go build -trimpath -o bin/cyandesk ./cmd/cyandesk
 ./bin/cyandesk client --config ./client-data approve <设备ID> --fingerprint <指纹>
 ```
 
+被控端需要真实显示器。没有 `DISPLAY` 时，`agent` 会退出，不会假装有画面。
+
+```sh
+gcc -o bin/cyandesk-view packaging/linux/cyandesk-view.c -lX11
+./bin/cyandesk agent --config ./host-data --display "$DISPLAY"
+./bin/cyandesk connect --config ./view-data --host <被控设备ID> --fingerprint <指纹> --mode control
+```
+
+`--mode view` 只申请观看。主机不因为主控本地改了开关就接受输入。当前画面是 320×240。本机 TCP 测试没有覆盖 UDP 打洞或 NAT。
+
 密码和引导凭据只从文件读取。
 
 管理页是 `https://127.0.0.1:13111/`。浏览器会提示私有证书，指纹必须和启动时打印的一致。管理员不能从这里观看屏幕。

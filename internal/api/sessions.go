@@ -80,7 +80,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := map[string]any{"session_id": sess.ID, "state": state, "consent_required": state != "active"}
 	if state == "active" {
-		ticket, err := s.mintTicket(sess, host, ctrl, scopes)
+		ticket, err := s.ensureTicket(sess, host, ctrl, scopes)
 		if err != nil {
 			s.fail(w, r, http.StatusInternalServerError, "INTERNAL", "无法签发票据")
 			return
@@ -155,7 +155,25 @@ func (s *Server) mintTicket(sess store.RemoteSession, host, ctrl store.Device, s
 	if err := s.Store.UpdateSession(sess.ID, "active", strings.Join(scopes, ","), secret.JTIHash(jti), ""); err != nil {
 		return "", err
 	}
+	exp := time.Unix(t.Expires, 0).UTC().Format(time.RFC3339Nano)
+	if err := s.Store.SaveRelayTicket(sess.ID, raw, secret.JTIHash(jti), exp); err != nil {
+		return "", err
+	}
 	return raw, nil
+}
+
+func (s *Server) ensureTicket(sess store.RemoteSession, host, ctrl store.Device, scopes []string) (string, error) {
+	s.ticketMu.Lock()
+	defer s.ticketMu.Unlock()
+	raw, hash, exp, err := s.Store.RelayTicket(sess.ID)
+	if err == nil && raw != "" && hash != "" {
+		used, uerr := s.Store.JTIUsed(hash)
+		deadline, perr := time.Parse(time.RFC3339Nano, exp)
+		if uerr == nil && perr == nil && !used && time.Now().Add(5*time.Second).Before(deadline) {
+			return raw, nil
+		}
+	}
+	return s.mintTicket(sess, host, ctrl, scopes)
 }
 
 func (s *Server) consent(w http.ResponseWriter, r *http.Request) {
@@ -211,7 +229,7 @@ func (s *Server) consent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess.Nonce = sess.Nonce
-	ticket, err := s.mintTicket(sess, host, ctrl, scopes)
+	ticket, err := s.ensureTicket(sess, host, ctrl, scopes)
 	if err != nil {
 		s.fail(w, r, http.StatusInternalServerError, "INTERNAL", "无法签发票据")
 		return
@@ -235,6 +253,26 @@ func subset(got, allowed []string) bool {
 	return true
 }
 
+func (s *Server) listMySessions(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	all, err := s.Store.ListSessions()
+	if err != nil {
+		s.fail(w, r, http.StatusInternalServerError, "INTERNAL", "无法读取会话")
+		return
+	}
+	out := make([]map[string]any, 0)
+	for _, sess := range all {
+		if !s.sessionVisible(a, sess) {
+			continue
+		}
+		out = append(out, s.sessionJSON(sess, false))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": out})
+}
+
 func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.authenticate(w, r)
 	if !ok {
@@ -245,7 +283,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusNotFound, "NOT_FOUND", "没有这个会话")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.sessionJSON(sess, true))
+	writeJSON(w, http.StatusOK, s.sessionJSON(sess, r.URL.Query().Get("ticket") == "1"))
 }
 
 func (s *Server) sessionVisible(a actor, sess store.RemoteSession) bool {
@@ -270,7 +308,7 @@ func (s *Server) sessionJSON(sess store.RemoteSession, includeTicket bool) map[s
 		host, err1 := s.Store.Device(sess.HostID)
 		ctrl, err2 := s.Store.Device(sess.ControllerID)
 		if err1 == nil && err2 == nil && host.TrustState == "trusted" && ctrl.TrustState == "trusted" {
-			if ticket, err := s.mintTicket(sess, host, ctrl, splitScopes(sess.GrantedScopes)); err == nil {
+			if ticket, err := s.ensureTicket(sess, host, ctrl, splitScopes(sess.GrantedScopes)); err == nil {
 				item["ticket"] = ticket
 			}
 		}

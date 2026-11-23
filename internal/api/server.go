@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"cyandesk/internal/secret"
@@ -44,6 +45,7 @@ type Server struct {
 	dummyPassword string
 	lim           *limiter
 	hub           *Hub
+	ticketMu      sync.Mutex
 }
 
 func New(st *store.Store, mat *secret.Material, artifacts string, logger *log.Logger) (*Server, error) {
@@ -95,6 +97,7 @@ func (s *Server) PublicHandler() http.Handler {
 	mux.HandleFunc("GET /api/v1/devices/{id}/grants", s.listGrants)
 	mux.HandleFunc("PUT /api/v1/devices/{id}/grants", s.putGrant)
 	mux.HandleFunc("POST /api/v1/sessions", s.createSession)
+	mux.HandleFunc("GET /api/v1/sessions", s.listMySessions)
 	mux.HandleFunc("GET /api/v1/sessions/{id}", s.getSession)
 	mux.HandleFunc("POST /api/v1/sessions/{id}/consent", s.consent)
 	mux.HandleFunc("DELETE /api/v1/sessions/{id}", s.closeSession)
