@@ -2,6 +2,10 @@
 
 日期：2026-11-23（北京时间）。对照的是已批准的设计 v0.1。下面只记录代码现状，不改设计原文。
 
+## 测试基线
+
+正在给用户测试的包仍是 0.1.5。校验写在 `docs/release/0.1.5-baseline.md`。不要用后面的构建替换那两个文件。
+
 ## 0.1.5
 
 `agent` 和 `connect` 会同时打开已认证的中继和直连 UDP。`TestExecutableAgentMigratesThroughRustGateway` 用编译出的程序、Xvfb、颜色窗口和 Rust 网关测过：先走上直连，打断直连后画面和点击改走中继，恢复后再迁回，关闭会话后主机打印授权撤销。直连 UDP 使用显式 nonce 的 Noise 数据报，丢包不重新握手。

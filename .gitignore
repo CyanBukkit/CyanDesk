@@ -1,5 +1,9 @@
 /bin/
 /gateway-rs/target/
+/vr/alvr-bridge/target/
+/android/.gradle/
+/android/**/build/
+/android/local.properties
 /data/
 /admin-web/node_modules/
 /admin-web/dist/

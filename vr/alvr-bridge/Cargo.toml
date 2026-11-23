@@ -1,0 +1,11 @@
+[package]
+name = "alvr-bridge"
+version = "0.0.0"
+edition = "2021"
+description = "Framing adapter checked against ALVR commit 2945d90e6285c4794a7ce89b07d85ca8e5d52185. Not an OpenVR driver."
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "alvr-bridge"
+path = "src/main.rs"

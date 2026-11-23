@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_disclosure">CyanDesk 只在你于系统设置里打开这项服务、并且当前会话包含控制权限时注入触控。应用不能自己打开这项权限。</string>
+    <string name="pico_limit">这台构建可以装在 Android 9 和 Pico 的 Android 系统上。它没有连接 OpenXR，也不提供 6DoF。</string>
+</resources>
