@@ -4,7 +4,7 @@
 
 设计原文在 `docs/design/CyanDesk-design-v0.1-approved.canvas.tsx`。做到哪一步写在 `docs/STATUS.md` 和 `docs/ACCEPTANCE.md`。
 
-要在一台 Linux 上跑服务端，用打好的包 `cyandesk-server-0.1.5-linux-amd64.tar.gz`。用法在包里的 `使用说明.txt`。二进制模式用包内的 `bin/cyandesk`、`bin/cyandesk-gateway` 和 `admin/`。Docker 模式见 `deploy/compose.yaml`，构建要联网，而且这次没有跑过。
+要在一台 Linux 上跑服务端，用打好的包 `cyandesk-server-0.1.6-linux-amd64.tar.gz`。用法在包里的 `使用说明.txt`。二进制模式用包内的 `bin/cyandesk`、`bin/cyandesk-gateway` 和 `admin/`。Docker 用 `CYANDESK_CERT_HOST=你的IP或域名 sh deploy/install.sh`。0.1.4 和 0.1.5 的数据目录可以继续用，升级不会删设备和证书。
 
 ## 本机运行
 

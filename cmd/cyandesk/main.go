@@ -42,7 +42,7 @@ func main() {
 	case "gui":
 		os.Exit(runGUI(os.Args[2:]))
 	case "version":
-		fmt.Println("cyandesk 0.1.5 protocol cyandesk/1")
+		fmt.Println("cyandesk 0.1.6 protocol cyandesk/1")
 	default:
 		usage()
 		os.Exit(2)
@@ -50,7 +50,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `CyanDesk 0.1.5
+	fmt.Fprint(os.Stderr, `CyanDesk 0.1.6
 
   cyandesk control --data 目录 --listen 0.0.0.0:13111 --internal 127.0.0.1:13112 --admin 目录 [--cert-host 名称] [--gateway-advertise 主机:13110] [--tls-cert 证书 --tls-key 私钥]
   cyandesk-gateway --listen 0.0.0.0:13110 --internal-url http://127.0.0.1:13112 --internal-token-file 文件

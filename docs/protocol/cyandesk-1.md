@@ -98,7 +98,7 @@ Secure 明文的第一个字节是应用类型，后面是载荷。
 
 ## UDP 数据报
 
-直连 UDP 先完成原来的 Noise_IK 握手。之后每条传输消息是 1 字节版本、4 字节密钥代、8 字节 nonce，再加上 ChaChaPoly 密文。nonce 用 flynn/noise 的 `CipherState.SetNonce` 显式写入，丢包或乱序不会把这条传输作废，也不会为每个丢包重新握手。接收方用 2048 位滑动窗口拒绝窗口内的重放。发送计数到达 2^16 时调用库里的 `CipherState.Rekey`，然后把 nonce 置回 0，避免同一把密钥重复使用 nonce。中继 TCP 仍是按序的 Noise 传输，因为它不丢消息。
+直连 UDP 先完成原来的 Noise_IK 握手。之后每条传输消息是 1 字节版本、4 字节密钥代、8 字节 nonce，再加上 ChaChaPoly 密文。这 13 字节头部同时作为 AEAD 的关联数据，改掉头部就不能通过校验，也不会因此切换密钥。nonce 用 flynn/noise 的 `CipherState.SetNonce` 显式写入。同一方向的发送计数由互斥锁保护，不会并发复用。接收方用 2048 位滑动窗口拒绝窗口内的重放，并保留上一代接收密钥，以便 2^16 换钥边界上的乱序包仍能解开。换钥调用库里的 `CipherState.Rekey`，然后把 nonce 置回 0。密钥代用尽时停止发送。中继 TCP 仍是按序的 Noise 传输。
 
 ## 不在本协议里的东西
 

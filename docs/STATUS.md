@@ -6,7 +6,7 @@
 
 `agent` 和 `connect` 会同时打开已认证的中继和直连 UDP。`TestExecutableAgentMigratesThroughRustGateway` 用编译出的程序、Xvfb、颜色窗口和 Rust 网关测过：先走上直连，打断直连后画面和点击改走中继，恢复后再迁回，关闭会话后主机打印授权撤销。直连 UDP 使用显式 nonce 的 Noise 数据报，丢包不重新握手。
 
-服务器包是 `cyandesk-server-0.1.5-linux-amd64.tar.gz`。Docker 构建这次没有跑。Windows 的 `cyandesk gui` 已交叉编译，没有在 Windows 上运行。公网 NAT 没有测。
+服务器包是 `cyandesk-server-0.1.6-linux-amd64.tar.gz`。在这台机器上安装了 Docker 29.1.3 和 Compose 2.40.3，手动启动 dockerd 后 `docker compose build` 和 `up -d` 成功。`https://127.0.0.1:13111/health/live` 返回 live，证书 SAN 含启动时给定的名字，bootstrap 文件权限是 0600，重启后证书指纹不变，13112 没有映射到宿主机。第一次把 dockerd 设成 `--bridge=none` 时构建失败，错误是 `network bridge not found`。Windows 的 `cyandesk gui` 已交叉编译，没有在 Windows 上运行。公网 NAT 没有测。0.1.4 与 0.1.5 的数据目录结构没有被删表迁移，升级保留原卷。
 
 这是可编译、可测试的桌面会话原型，不是 12 月 1 日前的完整软件，也不是各平台稳定版。
 

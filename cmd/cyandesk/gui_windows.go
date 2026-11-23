@@ -141,6 +141,14 @@ func (st *guiState) wndProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 func (st *guiState) login() {
 	st.profile.ServerURL = strings.TrimSpace(textOf(st.server))
 	st.profile.Fingerprint = strings.ToLower(strings.TrimSpace(textOf(st.fp)))
+	if !strings.HasPrefix(st.profile.ServerURL, "https://") {
+		setText(st.status, "服务器地址要以 https:// 开头，例如 https://203.0.113.10:13111")
+		return
+	}
+	if len(st.profile.Fingerprint) != 64 {
+		setText(st.status, "需要填写 64 位证书指纹，不能跳过核对")
+		return
+	}
 	user := strings.TrimSpace(textOf(st.user))
 	pass := textOf(st.pass)
 	if err := st.profile.Save(st.config); err != nil {
@@ -166,8 +174,9 @@ func (st *guiState) login() {
 		id, _ := d["id"].(string)
 		fp, _ := d["fingerprint"].(string)
 		name, _ := d["name"].(string)
+		trust, _ := d["trust_state"].(string)
 		st.devices = append(st.devices, [2]string{id, fp})
-		line, _ := syscall.UTF16PtrFromString(name + "  " + id)
+		line, _ := syscall.UTF16PtrFromString(trust + "  " + name + "  " + id)
 		guiSendMessage.Call(uintptr(st.list), lbAddString, 0, uintptr(unsafe.Pointer(line)))
 	}
 	setText(st.status, fmt.Sprintf("已登录，%d 台设备。选择一台后观看或控制。", len(devs)))

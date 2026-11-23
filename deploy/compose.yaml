@@ -3,7 +3,13 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    command: ["control", "--data", "/var/lib/cyandesk", "--listen", "0.0.0.0:13111", "--internal", "0.0.0.0:13112", "--admin", "/usr/share/cyandesk/admin"]
+      network: host
+    command: ["/usr/local/bin/cyandesk-control"]
+    environment:
+      CYANDESK_CERT_HOST: ${CYANDESK_CERT_HOST:-}
+      CYANDESK_GATEWAY_ADVERTISE: ${CYANDESK_GATEWAY_ADVERTISE:-}
+      CYANDESK_LISTEN: ${CYANDESK_LISTEN:-0.0.0.0:13111}
+      CYANDESK_INTERNAL: ${CYANDESK_INTERNAL:-0.0.0.0:13112}
     ports:
       - "13111:13111"
     volumes:
@@ -14,6 +20,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      network: host
     entrypoint: ["/usr/local/bin/cyandesk-gateway"]
     command: ["--listen", "0.0.0.0:13110", "--internal-url", "http://control:13112", "--internal-token-file", "/var/lib/cyandesk/internal.token"]
     depends_on:

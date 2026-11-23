@@ -27,8 +27,9 @@ COPY --from=build /out/cyandesk /usr/local/bin/cyandesk
 COPY --from=gateway /src/gateway-rs/target/release/cyandesk-gateway /usr/local/bin/cyandesk-gateway
 COPY --from=web /web/dist /usr/share/cyandesk/admin
 COPY deploy/entrypoint.sh /entrypoint.sh
-RUN chmod 755 /entrypoint.sh
+COPY deploy/control.sh /usr/local/bin/cyandesk-control
+RUN chmod 755 /entrypoint.sh /usr/local/bin/cyandesk-control
 WORKDIR /var/lib/cyandesk
 EXPOSE 13110 13111
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["control", "--data", "/var/lib/cyandesk", "--listen", "0.0.0.0:13111", "--internal", "0.0.0.0:13112", "--admin", "/usr/share/cyandesk/admin"]
+CMD ["/usr/local/bin/cyandesk-control"]
