@@ -42,7 +42,15 @@ gcc -o bin/cyandesk-view packaging/linux/cyandesk-view.c -lX11
 ./bin/cyandesk connect --config ./view-data --host <被控设备ID> --fingerprint <指纹> --mode control
 ```
 
-`--mode view` 只申请观看。主机不因为主控本地改了开关就接受输入。当前画面是 320×240。本机 TCP 测试没有覆盖 UDP 打洞或 NAT。
+`--mode view` 只申请观看。主机不因为主控本地改了开关就接受输入。画面大小用 `--width --height --fps` 指定，这不是帧率保证。
+
+`agent` 和 `connect` 仍在拨号时选定一条路径。活动会话在丢包后改走另一条加密 UDP、再按迟滞迁回，是 `TestLiveUDPMigration` 覆盖的本机路径，还没有接到这两条命令上。丢包会破坏那条 Noise 传输，恢复时要重新握手。
+
+Windows 10/11 的二进制可以用下面的命令交叉编译。编出来不代表在 Windows 上运行过。Windows 7 不在这个二进制里。
+
+```sh
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o cyandesk.exe ./cmd/cyandesk
+```
 
 密码和引导凭据只从文件读取。
 
@@ -54,7 +62,7 @@ gcc -o bin/cyandesk-view packaging/linux/cyandesk-view.c -lX11
 ./deploy/install.sh
 ```
 
-这台开发机没有 Docker、podman、rootlesskit，也没有 `/var/run/docker.sock`，所以安装脚本不能在这里跑通，不能记成通过。Compose 里的网关是 Rust 二进制，同时映射 13110 的 TCP 和 UDP，不发布 13112。卸载默认保留数据卷：
+这台开发机没有 Docker、podman、rootlesskit、slirp4netns，也没有 `/var/run/docker.sock`。没有为了安装它们去改宿主机防火墙。安装脚本在这里不能跑通，不能记成通过。Compose 里的网关是 Rust 二进制，同时映射 13110 的 TCP 和 UDP，不发布 13112。卸载默认保留数据卷：
 
 ```sh
 ./deploy/uninstall.sh

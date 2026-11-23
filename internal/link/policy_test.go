@@ -55,6 +55,11 @@ func TestHysteresisThenFailover(t *testing.T) {
 	if st.Selected != "direct" {
 		t.Fatalf("direct should remain, got %+v", st)
 	}
+	direct.RTT = 6 * time.Millisecond
+	st = Step(t0.Add(160*time.Millisecond), st, []Path{relay, direct}, cfg)
+	if st.Selected != "direct" {
+		t.Fatalf("a later sample of the same better path must not undo the switch: %+v", st)
+	}
 	direct.Failed = true
 	st = Step(t0.Add(220*time.Millisecond), st, []Path{relay, direct}, cfg)
 	if st.Selected != "" || st.Reason != "selected-failed" {

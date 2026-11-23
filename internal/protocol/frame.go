@@ -43,6 +43,7 @@ const (
 	AppReject
 	AppHello
 	AppPolicy
+	AppPath
 )
 
 var (

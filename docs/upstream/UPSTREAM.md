@@ -24,8 +24,8 @@ RustDesk 客户端是 Flutter 加 Rust 的完整桌面产品，服务端 OSS 是
 
 ## 网关语言
 
-设计建议网关用 Rust。本轮网关用 Go 实现，并且和客户端使用同一套帧与 Noise 代码，这样 13110 的鉴权、中继和竞速可以在当前环境里编译和测试。这是实现偏差，不是把 Rust 网关从目标里删掉。线协议以 `docs/protocol/cyandesk-1.md` 为准，后续 Rust 网关应对着同一组测试向量替换。
+发布网关是 Rust 程序 `cyandesk-gateway`。Go 网关留在仓库里作对照，不作为发布入口。线协议以 `docs/protocol/cyandesk-1.md` 为准。
 
 ## 本机工具链
 
-已在当前隔离环境确认：Go、Rust、Node、ffmpeg（libx264、libopus、x11grab）、Xvfb、xdotool、xrandr、gcc、libX11。没有 Docker 守护进程。没有 macOS、Windows、Android 或头显。
+已在当前隔离环境确认：Go、Rust、Node、ffmpeg（libx264、libopus、x11grab）、Xvfb、xdotool、xrandr、gcc、libX11。没有 Docker、podman、rootlesskit 或 slirp4netns。没有 macOS、Windows、Android 或头显。Windows 二进制只在这台 Linux 上交叉编译，没有在 Windows 上运行。

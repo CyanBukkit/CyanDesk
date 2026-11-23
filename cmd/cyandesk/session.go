@@ -1,25 +1,25 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"encoding/binary"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
-	"cyandesk/internal/capture"
 	"cyandesk/internal/clientcore"
 	"cyandesk/internal/desktop"
+	"cyandesk/internal/hostcap"
 	"cyandesk/internal/input"
 	"cyandesk/internal/protocol"
 )
 
 func runAgent(args []string) int {
+	return runAgentContext(context.Background(), args)
+}
+
+func runAgentContext(ctx context.Context, args []string) int {
 	config, display := "", os.Getenv("DISPLAY")
 	allowUpgrade := false
 	width, height, fps := 1280, 720, 15
@@ -55,8 +55,8 @@ func runAgent(args []string) int {
 		fmt.Fprintln(os.Stderr, "宽高必须为正偶数，帧率在 1 到 60 之间。这不是性能承诺。")
 		return 2
 	}
-	if display == "" {
-		fmt.Fprintln(os.Stderr, "没有图形会话。无头主机不会伪造屏幕。")
+	if err := hostcap.RequireSession(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
 	if config == "" {
@@ -70,10 +70,17 @@ func runAgent(args []string) int {
 	}
 	fmt.Println("主机代理已启动。等待已授权的会话。按 Ctrl+C 结束。")
 	for {
+		select {
+		case <-ctx.Done():
+			return 0
+		default:
+		}
 		sessions, err := profile.Sessions()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			time.Sleep(2 * time.Second)
+			if !sleepOrDone(ctx, 2*time.Second) {
+				return 0
+			}
 			continue
 		}
 		for _, sess := range sessions {
@@ -85,7 +92,20 @@ func runAgent(args []string) int {
 				fmt.Fprintln(os.Stderr, "会话结束")
 			}
 		}
-		time.Sleep(time.Second)
+		if !sleepOrDone(ctx, time.Second) {
+			return 0
+		}
+	}
+}
+
+func sleepOrDone(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 
@@ -129,10 +149,11 @@ func serveOne(profile clientcore.Profile, sessionID, display string, allowUpgrad
 	return desktop.ServeHost(ctx, link, desktop.HostConfig{
 		Gate: gate, GrantedInput: desktop.HasInput(info.Scopes), AllowUpgrade: allowUpgrade,
 		Grab: func() ([]byte, int, int, error) {
-			rgb, err := capture.GrabRGB(display, width, height)
+			rgb, err := hostcap.Grab(display, width, height)
 			return rgb, width, height, err
 		},
-		Inject:   desktop.XSink{Display: display},
+		Encode:   hostcap.Encode,
+		Inject:   hostcap.Sink{Display: display},
 		Alive:    func() bool { st, _, err := profile.Session(sessionID); return err == nil && st == "active" },
 		Interval: time.Second / time.Duration(fps),
 		Width:    width,
@@ -166,8 +187,8 @@ func runConnect(args []string) int {
 		fmt.Fprintln(os.Stderr, "需要 --config --host --fingerprint")
 		return 2
 	}
-	if os.Getenv("DISPLAY") == "" {
-		fmt.Fprintln(os.Stderr, "本机没有显示器，无法打开远端画面。")
+	if err := hostcap.RequireSession(); err != nil {
+		fmt.Fprintln(os.Stderr, "本机没有可用的画面窗口。")
 		return 2
 	}
 	profile, err := clientcore.Load(config)
@@ -210,11 +231,10 @@ func runConnect(args []string) int {
 	defer link.Close()
 	defer profile.CloseSession(sessionID)
 	fmt.Println("已连接。第一帧到达后打开窗口。关闭窗口或按 Ctrl+C 结束。")
-	var view *exec.Cmd
-	var in io.WriteCloser
+	var view *viewer
 	defer func() {
-		if view != nil && view.Process != nil {
-			_ = view.Process.Kill()
+		if view != nil && view.close != nil {
+			view.close()
 		}
 	}()
 	for {
@@ -228,40 +248,32 @@ func runConnect(args []string) int {
 			continue
 		}
 		if view == nil {
-			view = exec.Command("cyandesk-view", strconv.Itoa(w), strconv.Itoa(h))
-			view.Env = capture.WithDisplay(os.Getenv("DISPLAY"))
-			in, _ = view.StdinPipe()
-			out, _ := view.StdoutPipe()
-			if err := view.Start(); err != nil {
-				fmt.Fprintln(os.Stderr, "找不到 cyandesk-view。请先编译 packaging/linux/cyandesk-view.c")
+			view, err = startViewer(w, h)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, viewerStartError())
 				return 1
 			}
-			go readViewerInput(out, link, mode == "control")
+			go readViewerInput(view, link, mode == "control")
 			fmt.Printf("远端画面 %dx%d。尺寸由被控端 --width --height --fps 决定，这里不保证能维持该帧率。\n", w, h)
 		}
-		var hdr [4]byte
-		binary.BigEndian.PutUint32(hdr[:], uint32(len(rgb)))
-		_, _ = in.Write(hdr[:])
-		_, _ = in.Write(rgb)
+		view.present(rgb)
 	}
 }
 
-func readViewerInput(r io.Reader, link interface {
+func readViewerInput(view *viewer, link interface {
 	Send(byte, []byte) error
 }, allow bool) {
-	sc := bufio.NewScanner(r)
 	var seq uint64
-	for sc.Scan() {
+	for {
+		x, y, ok := view.nextClick()
+		if !ok {
+			return
+		}
 		if !allow {
 			continue
 		}
-		fields := strings.Fields(sc.Text())
-		if len(fields) == 3 && fields[0] == "click" {
-			x, _ := strconv.Atoi(fields[1])
-			y, _ := strconv.Atoi(fields[2])
-			seq++
-			_ = link.Send(protocol.AppInput, desktop.EncodeInput(input.Event{Epoch: 1, Seq: seq, Kind: 2, X: int32(x), Y: int32(y), Button: 1}))
-		}
+		seq++
+		_ = link.Send(protocol.AppInput, desktop.EncodeInput(input.Event{Epoch: 1, Seq: seq, Kind: 2, X: int32(x), Y: int32(y), Button: 1}))
 	}
 }
 

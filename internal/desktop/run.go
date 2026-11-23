@@ -2,15 +2,11 @@ package desktop
 
 import (
 	"context"
-	"os/exec"
-	"strconv"
 	"strings"
 
 	"encoding/base64"
 
-	"cyandesk/internal/capture"
 	"cyandesk/internal/e2ee"
-	"cyandesk/internal/input"
 	"cyandesk/internal/protocol"
 	"cyandesk/internal/remote"
 	"github.com/flynn/noise"
@@ -54,20 +50,4 @@ func HasInput(scopes []string) bool {
 		}
 	}
 	return false
-}
-
-// XSink injects pointer and key events into one X display.
-type XSink struct{ Display string }
-
-func (s XSink) Inject(ev input.Event) error {
-	if ev.Kind == 4 || ev.Kind == 5 {
-		action := "keydown"
-		if ev.Kind == 5 {
-			action = "keyup"
-		}
-		cmd := exec.Command("xdotool", action, strconv.FormatUint(uint64(ev.Key), 10))
-		cmd.Env = capture.WithDisplay(s.Display)
-		return cmd.Run()
-	}
-	return capture.Click(s.Display, int(ev.X), int(ev.Y))
 }

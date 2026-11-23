@@ -202,6 +202,17 @@ func (p *Profile) EnsureKeys() error {
 	return nil
 }
 
+func reportedEngine(osName string) (string, bool) {
+	switch osName {
+	case "linux":
+		return "linux-ffmpeg", true
+	case "windows":
+		return "windows-gdi", true
+	default:
+		return "unimplemented", false
+	}
+}
+
 func (p *Profile) Enroll(name, osName, arch string) error {
 	if err := p.EnsureKeys(); err != nil {
 		return err
@@ -219,13 +230,14 @@ func (p *Profile) Enroll(name, osName, arch string) error {
 		return err
 	}
 	sig := ed25519.Sign(ed25519.PrivateKey(priv), identity.EnrollMessage(nonce, p.PublicKey, p.NoisePublic, name))
+	engine, captureOK := reportedEngine(osName)
 	payload := map[string]any{
 		"name": name, "os": osName, "arch": arch,
 		"public_key": p.PublicKey, "noise_public_key": p.NoisePublic,
 		"capabilities": map[string]any{
-			"capture": true, "input": true, "audio": false,
+			"capture": captureOK, "input": captureOK, "audio": false,
 			"virtual_display": false, "vr_send": false, "vr_receive": false,
-			"engine": "linux-ffmpeg",
+			"engine": engine,
 		},
 		"challenge_id": ch["challenge_id"], "signature": base64.RawStdEncoding.EncodeToString(sig),
 	}

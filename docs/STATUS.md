@@ -9,33 +9,45 @@
 - 控制面：SQLite、Argon2id、短时令牌、刷新令牌轮换、设备登记、指纹确认、授权、撤销、审计、制品签名。
 - 13111：HTTPS、管理 API、中文管理页。内部票据接口不在公开端口上。没有执行命令的接口。
 - 13110：Rust 网关同时听 TCP 和 UDP。没有票据不能中继。UDP 先交换 64 字节 cookie，错误 cookie 的包被丢掉。媒体仍是端到端 Noise 密文。
-- 持续桌面会话：主机按间隔采集 X11，用 libx264 编码，主控解码并画到本地窗口。队列满时丢掉旧画面。只观看和未授权的控制升级由主机拒绝。撤销后停止送画面。断线后换新票据重连，重复输入序号不会再注入。用过的中继票据不能再连接。
-- 命令：`agent` 和 `connect`。连接必须带上已核对的指纹。
+- 持续桌面会话：Linux 主机按间隔采集 X11，用 libx264 编码，主控解码并画到本地窗口。队列满时丢掉旧画面。只观看和未授权的控制升级由主机拒绝。
+- 活动会话迁移：两条已经握手的 UDP 路径同时开着。直连被丢包打死后，JPEG 画面和输入改走中继。直连要重新握手后才恢复。恢复后先保持在中继上，过了迟滞才迁回。序号 6 先到、5 后到时，先注入 5 再注入 6。重复序号不注入。换路径不重置序号。指纹不一致或 prologue 不一致时握手不建立。
+- 命令：`agent` 和 `connect` 走同一套入口，采集和窗口按系统分开。Linux 仍用 X11。Windows 10/11 构建使用 GDI BitBlt、SendInput、JPEG 和 Win32 窗口，另有一个服务适配器。
+- Windows 7 用单独的 `cyandesk_win7` 构建标签，不在这次的 Windows 二进制里，也没有实现。
 
-最终网关是 Rust 程序 `cyandesk-gateway`，按现有帧和票据接口转发密文，并在 UDP 上先做等长 cookie。仓库里的 Go 网关只留作对照测试，不作为发布网关。说明见 `docs/ADR-gateway-go.md`。
+最终网关是 Rust 程序 `cyandesk-gateway`。仓库里的 Go 网关只留作对照。说明见 `docs/ADR-gateway-go.md`。
+
+`agent` / `connect` 目前仍在拨号时选定一条路径并关掉另一条。能在丢包后迁回的是 `desktop.Live`，由 `TestLiveUDPMigration` 驱动，还没有接到这两条命令的拨号函数上。
 
 ## 已测试
 
-`go test ./...` 在这台 Linux 上通过。持续会话记录是 `frames_sent=10 colors=2 injections=2 rejected=2`，那一次路径是本机 TCP。另有一次私有网络命名空间测试：两端地址是 10.1.0.2 和 10.2.0.2，中继经过 25ms 延迟代理，直连 UDP 探测约 70µs，中继约 127ms，选中 direct-udp；重复序号被记为一次重复而没有再次注入。这不是公网 NAT。
+`go test ./...` 在这台 Linux 上通过。
 
-- 连续多帧里远端颜色变了，不是只送一帧。
-- 已授权点击改变远端窗口。切到只观看后主机不再注入。未允许的升级被拒绝。
-- 断开再连，旧序号不重复注入，新序号注入一次。
-- 已核销票据再次拨号被拒绝。结束会话后输入不再注入。
-- 账号、指纹、私有下载和签名篡改测试仍然通过。
+- 持续会话仍是本机 TCP：多帧变色、授权点击、只观看拒绝、断线去重。
+- 私有命名空间 10.1.0.2 与 10.2.0.2 的路由实验仍然只是私有实验网，不是 NAT，也不拿探测耗时当性能结果。
+- `TestLiveUDPMigration` 在本机 UDP 上完成了上面的迁移。记录在 `migration.json`：`network=localhost-udp`，`nat=not-nat`，`performance_claim=false`。探测耗时只决定是否切换。
+- `TestEmulatedUserspaceNAT` 在新的网络命名空间里用用户态转发改写了源端口，回程可达。内核 nat 表不可用，没有安装规则。这不是公网 NAT，也不是 10.1/10.2 那次路由。
+- 账号、指纹、坏票据、坏 cookie 测试仍然通过。
 
-集成日志不包含口令、引导凭据或票据。
+## 平台
+
+| 系统 | 主控 | 被控 | 这次的证据 |
+|---|---|---|---|
+| Linux | `connect` + X11 窗口 | `agent` + X11/ffmpeg | 在这台机器上测试过 |
+| Windows 10/11 | Win32 窗口代码 | GDI BitBlt、SendInput、服务适配器 | 交叉编译出了 PE32+ 二进制。没有在 Windows 上运行 |
+| Windows 7 | 不在上述二进制里 | 同左 | 未实现，未测试 |
+| macOS Intel / Apple Silicon | 未实现 | 未实现 | 无 |
+| Android 9+ / Pico | 未实现 | 未实现 | 无 |
+| iOS / iPadOS / visionOS | 未实现 | 设计上只做主控 | 无 |
+| 虚拟显示器 L3、SteamVR / ALVR | 未实现 | 未实现 | 无 |
+
+交叉编译成功不是 Windows 可用的证据。
 
 ## 没有做
 
-- 公网 NAT 没有测。命名空间里的路由是私有实验网，内核没有 netem。
-- 画面尺寸和帧率可以用 `--width --height --fps` 配置。没有单独的性能测量，不能把测试帧率当成保证。
-- RustDesk 没有链进来。ALVR、SteamVR、头显没有做。
-- Windows、macOS、Android、Pico、iOS、iPadOS、visionOS 没有构建或真机测试。
-- 没有操作系统虚拟显示器。画面固定 320×240，没有硬件编码测量。
-- 这台机器没有 Docker，Compose 没有跑过。
-- 没有公网部署，没有购买，没有使用真实用户的服务器或账号。
-
-## 下一步
-
-在隔离网络里做 UDP 打洞和中继迁移，并用抓包证明。网关是否改回 Rust，等用户看过 ADR 再定。
+- 公网 NAT 和真实防火墙没有测。缺测试环境是阻塞项，不是把模拟结果写成通过。
+- `agent` / `connect` 还不会在会话中途迁移。
+- 没有性能承诺。`--width --height --fps` 只是采集参数。
+- RustDesk 没有链进来。ALVR 没有构建。
+- 没有操作系统虚拟显示器。
+- 这台机器没有 Docker、podman、rootlesskit、slirp4netns，也没有 `/var/run/docker.sock`。没有改宿主机防火墙。Dockerfile 和 Compose 只做了文本核对：网关是 Rust 二进制，13110 同时有 TCP 和 UDP，13112 不映射出来，入口脚本不打印引导凭据。Compose 没有跑过。
+- 没有公网部署，没有购买，没有使用真实用户的服务器、设备或账号，没有签名证书。

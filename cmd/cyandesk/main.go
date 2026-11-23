@@ -34,10 +34,12 @@ func main() {
 		os.Exit(runClient(os.Args[2:]))
 	case "agent":
 		os.Exit(runAgent(os.Args[2:]))
+	case "service":
+		os.Exit(runService(os.Args[2:]))
 	case "connect":
 		os.Exit(runConnect(os.Args[2:]))
 	case "version":
-		fmt.Println("cyandesk 0.1.2 protocol cyandesk/1")
+		fmt.Println("cyandesk 0.1.3 protocol cyandesk/1")
 	default:
 		usage()
 		os.Exit(2)
@@ -296,7 +298,7 @@ func runClient(args []string) int {
 				name = rest[i+1]
 			}
 		}
-		if err := p.Enroll(name, "linux", "amd64"); err != nil {
+		if err := p.Enroll(name, goos(), goarch()); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}

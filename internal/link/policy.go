@@ -89,13 +89,14 @@ func Step(now time.Time, st State, paths []Path, cfg Config) State {
 		st.Reason = prev.Reason
 		return st
 	}
-	if st.Pending != best.Name || st.PendingRTT != best.RTT {
+	if st.Pending != best.Name {
 		st.Pending = best.Name
 		st.PendingSince = now
 		st.PendingRTT = best.RTT
 		st.Reason = "watching"
 		return st
 	}
+	st.PendingRTT = best.RTT
 	if now.Sub(st.PendingSince) >= cfg.MinHold && (st.LastSwitch.IsZero() || now.Sub(st.LastSwitch) >= cfg.Cooldown) {
 		st.Selected = best.Name
 		st.SelectedRTT = best.RTT

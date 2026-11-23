@@ -35,6 +35,7 @@ type HostConfig struct {
 	Queue          *VideoQueue
 	FramesSent     *int
 	InputsRejected *int
+	Encode         func(rgb []byte, w, h int) ([]byte, error)
 }
 
 // ServeHost captures, encodes, and sends until the context ends, the path
@@ -131,7 +132,11 @@ func hostSend(ctx context.Context, link Link, cfg HostConfig) error {
 				continue
 			}
 			rgb = rgb[:w*h*3]
-			annex, err := media.EncodeH264(rgb, w, h)
+			encode := cfg.Encode
+			if encode == nil {
+				encode = media.EncodeH264
+			}
+			annex, err := encode(rgb, w, h)
 			if err != nil {
 				continue
 			}
@@ -162,7 +167,11 @@ func DecodeDeliveredFrame(kind byte, payload []byte) (seq uint32, rgb []byte, w,
 	if err != nil {
 		return 0, nil, 0, 0, false, err
 	}
-	rgb, err = media.DecodeH264(annex, w, h)
+	if len(annex) >= 2 && annex[0] == 0xff && annex[1] == 0xd8 {
+		rgb, err = media.DecodeJPEG(annex, w, h)
+	} else {
+		rgb, err = media.DecodeH264(annex, w, h)
+	}
 	if err != nil {
 		return 0, nil, 0, 0, false, err
 	}
