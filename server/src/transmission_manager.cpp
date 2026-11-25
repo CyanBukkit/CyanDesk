@@ -341,3 +341,58 @@ void TransmissionManager::AliveChecker() {
     }
   }
 }
+
+// === Device registry implementation ===
+void TransmissionManager::RegisterDevice(
+    const std::string& user_id, const std::string& device_name,
+    const std::string& platform, const std::string& ip,
+    websocketpp::connection_hdl hdl) {
+  std::lock_guard<std::recursive_mutex> lock(devices_mutex_);
+  DeviceInfo info;
+  info.user_id = user_id;
+  info.device_name = device_name.empty() ? user_id : device_name;
+  info.platform = platform;
+  info.ip_address = ip;
+  info.hdl = hdl;
+  info.last_seen = std::chrono::duration_cast<std::chrono::seconds>(
+                       std::chrono::system_clock::now().time_since_epoch())
+                       .count();
+  devices_[user_id] = info;
+  LOG_INFO("Device registered: id={}, name={}, platform={}, ip={}", user_id,
+           info.device_name, platform, ip);
+}
+
+void TransmissionManager::UnregisterDevice(websocketpp::connection_hdl hdl) {
+  std::lock_guard<std::recursive_mutex> lock(devices_mutex_);
+  for (auto it = devices_.begin(); it != devices_.end(); ++it) {
+    if (it->second.hdl.lock().get() == hdl.lock().get()) {
+      LOG_INFO("Device unregistered: id={}", it->first);
+      devices_.erase(it);
+      return;
+    }
+  }
+}
+
+std::vector<DeviceInfo> TransmissionManager::GetAllDevices() const {
+  std::lock_guard<std::recursive_mutex> lock(devices_mutex_);
+  std::vector<DeviceInfo> result;
+  for (const auto& kv : devices_) {
+    if (!kv.second.hdl.expired()) {
+      result.push_back(kv.second);
+    }
+  }
+  return result;
+}
+
+DeviceInfo TransmissionManager::GetDevice(const std::string& user_id) const {
+  std::lock_guard<std::recursive_mutex> lock(devices_mutex_);
+  auto it = devices_.find(user_id);
+  if (it != devices_.end()) return it->second;
+  DeviceInfo empty;
+  return empty;
+}
+
+bool TransmissionManager::IsDeviceRegistered(const std::string& user_id) const {
+  std::lock_guard<std::recursive_mutex> lock(devices_mutex_);
+  return devices_.find(user_id) != devices_.end();
+}

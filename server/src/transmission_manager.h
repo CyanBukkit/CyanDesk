@@ -4,8 +4,18 @@
 #include <list>
 #include <map>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <websocketpp/server.hpp>
+
+struct DeviceInfo {
+  std::string user_id;
+  std::string device_name;
+  std::string platform;
+  std::string ip_address;
+  websocketpp::connection_hdl hdl;
+  uint32_t last_seen;
+};
 
 class TransmissionManager {
  public:
@@ -50,6 +60,19 @@ class TransmissionManager {
  public:
   int UpdateWsHandleLastActiveTime(websocketpp::connection_hdl hdl);
   void AliveChecker();
+
+  // === Device registry (for machine listing) ===
+  void RegisterDevice(const std::string& user_id, const std::string& device_name,
+                      const std::string& platform, const std::string& ip,
+                      websocketpp::connection_hdl hdl);
+  void UnregisterDevice(websocketpp::connection_hdl hdl);
+  std::vector<DeviceInfo> GetAllDevices() const;
+  DeviceInfo GetDevice(const std::string& user_id) const;
+  bool IsDeviceRegistered(const std::string& user_id) const;
+
+ private:
+  std::map<std::string, DeviceInfo> devices_;
+  mutable std::recursive_mutex devices_mutex_;
 
  private:
   std::map<std::string, std::string> transmission_host_id_list_;

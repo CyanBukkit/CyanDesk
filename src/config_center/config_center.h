@@ -36,6 +36,7 @@ class ConfigCenter {
   int SetServerPort(int signal_server_port);
   int SetCoturnServerPort(int coturn_server_port);
   int SetSelfHosted(bool enable_self_hosted);
+  int SetServerPassword(const std::string& password);
   int SetMinimizeToTray(bool enable_minimize_to_tray);
   int SetAutostart(bool enable_autostart);
   int SetDaemon(bool enable_daemon);
@@ -57,6 +58,7 @@ class ConfigCenter {
   int GetDefaultSignalServerPort() const;
   int GetDefaultCoturnServerPort() const;
   bool IsSelfHosted() const;
+  std::string GetServerPassword() const;
   bool IsMinimizeToTray() const;
   bool IsEnableAutostart() const;
   bool IsEnableDaemon() const;
@@ -84,6 +86,7 @@ class ConfigCenter {
   int coturn_server_port_ = 0;
   int coturn_server_port_default_ = 3478;
   bool enable_self_hosted_ = false;
+  std::string server_password_ = "";
   bool enable_minimize_to_tray_ = false;
   bool enable_autostart_ = false;
   bool enable_daemon_ = false;

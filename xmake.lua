@@ -172,6 +172,22 @@ target("version_checker")
     add_files("src/version_checker/*.cpp")
     add_includedirs("src/version_checker", {public = true})
 
+target("device_list")
+    set_kind("object")
+    add_packages("cpp-httplib")
+    add_deps("rd_log")
+    add_files("src/device_list/*.cpp")
+    add_includedirs("src/device_list", {public = true})
+
+target("lan_scanner")
+    set_kind("object")
+    add_deps("rd_log")
+    add_files("src/lan_scanner/*.cpp")
+    add_includedirs("src/lan_scanner", {public = true})
+    if is_os("windows") then
+        add_links("ws2_32")
+    end
+
 target("tools")
     set_kind("object")
     add_deps("rd_log")
@@ -187,7 +203,8 @@ target("gui")
     add_defines("CROSSDESK_VERSION=\"" .. (get_config("CROSSDESK_VERSION") or "Unknown") .. "\"")
     add_deps("rd_log", "common", "assets", "config_center", "minirtc", 
         "path_manager", "screen_capturer", "speaker_capturer", 
-        "device_controller", "thumbnail", "version_checker", "tools")
+        "device_controller", "thumbnail", "version_checker", "tools",
+        "device_list", "lan_scanner")
     add_files("src/gui/*.cpp", "src/gui/panels/*.cpp", "src/gui/toolbars/*.cpp",
         "src/gui/windows/*.cpp")
     add_includedirs("src/gui", "src/gui/panels", "src/gui/toolbars",

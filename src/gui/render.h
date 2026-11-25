@@ -651,6 +651,8 @@ class Render {
   char signal_server_ip_self_[256] = "";
   char signal_server_port_self_[6] = "";
   char coturn_server_port_self_[6] = "";
+  char server_password_self_[128] = "";
+  bool server_password_visible_ = false;
   bool settings_window_pos_reset_ = true;
   bool self_hosted_server_config_window_pos_reset_ = true;
   std::string selected_current_file_path_ = "";

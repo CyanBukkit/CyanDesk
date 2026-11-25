@@ -74,6 +74,14 @@ int ConfigCenter::Load() {
   enable_minimize_to_tray_ = ini_.GetBoolValue(
       section_, "enable_minimize_to_tray", enable_minimize_to_tray_);
 
+  const char* server_pw_value =
+      ini_.GetValue(section_, "server_password", nullptr);
+  if (server_pw_value != nullptr && strlen(server_pw_value) > 0) {
+    server_password_ = server_pw_value;
+  } else {
+    server_password_ = "";
+  }
+
   const char* file_transfer_save_path_value =
       ini_.GetValue(section_, "file_transfer_save_path", nullptr);
   if (file_transfer_save_path_value != nullptr &&
@@ -106,6 +114,7 @@ int ConfigCenter::Save() {
                       static_cast<long>(signal_server_port_));
     ini_.SetLongValue(section_, "coturn_server_port",
                       static_cast<long>(coturn_server_port_));
+    ini_.SetValue(section_, "server_password", server_password_.c_str());
   }
 
   ini_.SetBoolValue(section_, "enable_autostart", enable_autostart_);
@@ -258,6 +267,11 @@ int ConfigCenter::SetSelfHosted(bool enable_self_hosted) {
       coturn_server_port_ = static_cast<int>(
           ini_.GetLongValue(section_, "coturn_server_port", 0));
     }
+    const char* server_pw_value =
+        ini_.GetValue(section_, "server_password", nullptr);
+    if (server_pw_value != nullptr && strlen(server_pw_value) > 0) {
+      server_password_ = server_pw_value;
+    }
 
     ini_.SetValue(section_, "signal_server_host", signal_server_host_.c_str());
     ini_.SetLongValue(section_, "signal_server_port",
@@ -384,5 +398,19 @@ int ConfigCenter::SetFileTransferSavePath(const std::string& path) {
 
 std::string ConfigCenter::GetFileTransferSavePath() const {
   return file_transfer_save_path_;
+}
+
+int ConfigCenter::SetServerPassword(const std::string& password) {
+  server_password_ = password;
+  ini_.SetValue(section_, "server_password", server_password_.c_str());
+  SI_Error rc = ini_.SaveFile(config_path_.c_str());
+  if (rc < 0) {
+    return -1;
+  }
+  return 0;
+}
+
+std::string ConfigCenter::GetServerPassword() const {
+  return server_password_;
 }
 }  // namespace crossdesk

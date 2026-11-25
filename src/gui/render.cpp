@@ -770,12 +770,17 @@ int Render::CreateConnectionPeer() {
   } else {
     coturn_server_port_self_[0] = '\0';
   }
+  strncpy(server_password_self_,
+          config_center_->GetServerPassword().c_str(),
+          sizeof(server_password_self_) - 1);
+  server_password_self_[sizeof(server_password_self_) - 1] = '\0';
 
   // peer config
   strncpy((char*)params_.signal_server_ip, signal_server_ip.c_str(),
           sizeof(params_.signal_server_ip) - 1);
   params_.signal_server_ip[sizeof(params_.signal_server_ip) - 1] = '\0';
   params_.signal_server_port = signal_server_port;
+  params_.signal_server_password = server_password_self_;
   strncpy((char*)params_.stun_server_ip, signal_server_ip.c_str(),
           sizeof(params_.stun_server_ip) - 1);
   params_.stun_server_ip[sizeof(params_.stun_server_ip) - 1] = '\0';
@@ -1458,6 +1463,10 @@ int Render::Run() {
     } else {
       signal_server_port_self_[0] = '\0';
     }
+    strncpy(server_password_self_,
+            config_center_->GetServerPassword().c_str(),
+            sizeof(server_password_self_) - 1);
+    server_password_self_[sizeof(server_password_self_) - 1] = '\0';
   } else {
     std::cerr << "Failed to create PathManager" << std::endl;
     return -1;

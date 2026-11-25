@@ -120,6 +120,39 @@ int Render::SelfHostedServerWindow() {
                          IM_ARRAYSIZE(coturn_server_port_self_));
       }
 
+      ImGui::Separator();
+
+      // === Server Password ===
+      {
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%s",
+                    (ConfigCenter::LANGUAGE::CHINESE == localization_language_
+                         ? "服务器密码"
+                         : "Server Password"));
+        ImGui::SameLine();
+        if (ConfigCenter::LANGUAGE::CHINESE == localization_language_) {
+          ImGui::SetCursorPosX(title_bar_button_width_ * 2.5f);
+        } else {
+          ImGui::SetCursorPosX(title_bar_button_width_ * 3.43f);
+        }
+        ImGui::SetNextItemWidth(title_bar_button_width_ * 3.6f);
+
+        ImGuiInputTextFlags pw_flags = server_password_visible_
+                                           ? ImGuiInputTextFlags_None
+                                           : ImGuiInputTextFlags_Password;
+        ImGui::InputText("##server_password_self_", server_password_self_,
+                         IM_ARRAYSIZE(server_password_self_), pw_flags);
+
+        ImGui::SameLine();
+        if (server_password_visible_) {
+          if (ImGui::Button("*")) server_password_visible_ = false;
+          ImGui::SetTooltip("Hide password");
+        } else {
+          if (ImGui::Button("*")) server_password_visible_ = true;
+          ImGui::SetTooltip("Show password");
+        }
+      }
+
       if (stream_window_inited_) {
         ImGui::EndDisabled();
       }
@@ -142,6 +175,7 @@ int Render::SelfHostedServerWindow() {
         config_center_->SetServerHost(signal_server_ip_self_);
         config_center_->SetServerPort(atoi(signal_server_port_self_));
         config_center_->SetCoturnServerPort(atoi(coturn_server_port_self_));
+        config_center_->SetServerPassword(server_password_self_);
         strncpy(signal_server_ip_, signal_server_ip_self_,
                 sizeof(signal_server_ip_) - 1);
         signal_server_ip_[sizeof(signal_server_ip_) - 1] = '\0';
@@ -181,6 +215,10 @@ int Render::SelfHostedServerWindow() {
         } else {
           coturn_server_port_self_[0] = '\0';
         }
+        strncpy(server_password_self_,
+                config_center_->GetServerPassword().c_str(),
+                sizeof(server_password_self_) - 1);
+        server_password_self_[sizeof(server_password_self_) - 1] = '\0';
       }
 
       ImGui::SetWindowFontScale(1.0f);

@@ -1,5 +1,7 @@
 #include "signal_server.h"
 
+#include <asio.hpp>
+
 #include "common.h"
 #include "log.h"
 
@@ -52,6 +54,10 @@ bool SignalServer::on_open(websocketpp::connection_hdl hdl) {
 
 bool SignalServer::on_close(websocketpp::connection_hdl hdl) {
   std::string user_id = transmission_manager_.ReleaseUserFromeWsHandle(hdl);
+
+  // Unregister device from global list
+  transmission_manager_.UnregisterDevice(hdl);
+
   if (!user_id.empty()) {
     LOG_INFO("Websocket connection [{}|{}] closed", ws_connections_[hdl],
              user_id);
@@ -122,8 +128,21 @@ bool SignalServer::on_pong(websocketpp::connection_hdl hdl, std::string s) {
   return true;
 }
 
-void SignalServer::run(uint16_t port) {
-  LOG_INFO("Signal server runs on port [{}]", port);
+void SignalServer::run(uint16_t port, uint16_t http_port,
+                      const std::string& server_password) {
+  server_password_ = server_password;
+  if (!server_password_.empty()) {
+    LOG_INFO("Server password is set ({} chars)", server_password_.size());
+  } else {
+    LOG_WARN("No server password set — any client can connect");
+  }
+
+  LOG_INFO("Signal server runs on WebSocket port [{}]", port);
+  if (http_port > 0) {
+    http_running_ = true;
+    http_thread_ = std::thread(&SignalServer::RunHttpApi, this, http_port);
+    LOG_INFO("HTTP API server runs on port [{}]", http_port);
+  }
 
   server_.set_reuse_addr(true);
   server_.listen(port);
@@ -133,6 +152,11 @@ void SignalServer::run(uint16_t port) {
 
   // Start the Asio io_service run loop
   server_.run();
+
+  http_running_ = false;
+  if (http_thread_.joinable()) {
+    http_thread_.join();
+  }
 }
 
 void SignalServer::send_msg(websocketpp::connection_hdl hdl, json message) {
@@ -158,6 +182,39 @@ void SignalServer::on_message(websocketpp::connection_hdl hdl,
         host_id = client_id_generator_.GeneratorNewId();
         LOG_INFO("New client, assign id [{}] to it", host_id);
       }
+
+      // === Server password verification ===
+      if (!server_password_.empty()) {
+        std::string client_pw = j.value("server_password", "");
+        if (client_pw != server_password_) {
+          LOG_WARN("Login rejected: wrong server password from [{}]", host_id);
+          json message = {{"type", "login"},
+                          {"user_id", host_id},
+                          {"status", "fail"},
+                          {"reason", "Incorrect server password"}};
+          send_msg(hdl, message);
+          break;
+        }
+      }
+
+      // === Device registration ===
+      std::string device_name = j.value("device_name", "");
+      std::string platform = j.value("platform", "");
+      std::string ip_address = j.value("ip", "");
+      // Try to get remote IP from connection
+      if (ip_address.empty()) {
+        try {
+          ip_address = server_.get_con_from_hdl(hdl)
+                           ->get_remote_endpoint();
+          // extract host from "host:port"
+          auto colon = ip_address.rfind(':');
+          if (colon != std::string::npos) ip_address = ip_address.substr(0, colon);
+        } catch (...) {
+          ip_address = "unknown";
+        }
+      }
+      transmission_manager_.RegisterDevice(host_id, device_name, platform,
+                                           ip_address, hdl);
 
       LOG_INFO("Receive login request with id [{}]", host_id);
       bool success = transmission_manager_.BindUserToWsHandle(host_id, hdl);
@@ -373,4 +430,100 @@ void SignalServer::on_message(websocketpp::connection_hdl hdl,
   // LOG_INFO("Message body: {}", sdp);
 
   // server_.send(hdl, msg->get_payload(), msg->get_opcode());
+}
+
+// === Simple HTTP API for device listing ===
+void SignalServer::RunHttpApi(uint16_t port) {
+  try {
+    asio::io_context io_context;
+    asio::ip::tcp::acceptor acceptor(io_context);
+    asio::ip::tcp::endpoint endpoint(asio::ip::tcp::v4(), port);
+    acceptor.open(endpoint.protocol());
+    acceptor.set_option(asio::ip::tcp::acceptor::reuse_address(true));
+    acceptor.bind(endpoint);
+    acceptor.listen();
+
+    LOG_INFO("HTTP API listening on 0.0.0.0:{}", port);
+
+    while (http_running_) {
+      asio::ip::tcp::socket socket(io_context);
+      try {
+        acceptor.accept(socket);
+      } catch (const std::exception& e) {
+        if (http_running_)
+          LOG_ERROR("HTTP accept error: {}", e.what());
+        break;
+      }
+
+      // Handle request synchronously (simple, single-client-at-a-time)
+      try {
+        char buf[4096];
+        std::error_code ec;
+        socket.read_some(asio::buffer(buf), ec);
+        if (ec) continue;
+
+        std::string request(buf);
+        std::string response;
+
+        // Parse path from first line: "GET /api/devices HTTP/1.1"
+        auto line_end = request.find("\r\n");
+        std::string first_line = request.substr(0, line_end);
+        auto space1 = first_line.find(' ');
+        auto space2 = first_line.rfind(' ');
+        std::string method = first_line.substr(0, space1);
+        std::string path = first_line.substr(space1 + 1, space2 - space1 - 1);
+
+        if (method == "GET" && path == "/api/devices") {
+          auto devices = transmission_manager_.GetAllDevices();
+          json device_array = json::array();
+          uint32_t now = std::chrono::duration_cast<std::chrono::seconds>(
+                             std::chrono::system_clock::now().time_since_epoch())
+                             .count();
+          for (const auto& d : devices) {
+            device_array.push_back(
+                {{"user_id", d.user_id},
+                 {"device_name", d.device_name},
+                 {"platform", d.platform},
+                 {"ip", d.ip_address},
+                 {"online_for_seconds", (int)(now - d.last_seen)}});
+          }
+          json resp = {{"status", "ok"},
+                       {"count", devices.size()},
+                       {"devices", device_array},
+                       {"timestamp", now}};
+          std::string body = resp.dump(2);
+          response = "HTTP/1.1 200 OK\r\n"
+                     "Content-Type: application/json\r\n"
+                     "Access-Control-Allow-Origin: *\r\n"
+                     "Content-Length: " +
+                     std::to_string(body.size()) + "\r\n\r\n" + body;
+        } else if (method == "GET" && path == "/api/health") {
+          auto devices = transmission_manager_.GetAllDevices();
+          json resp = {{"status", "ok"},
+                       {"online_devices", devices.size()},
+                       {"server_password_set", !server_password_.empty()}};
+          std::string body = resp.dump();
+          response = "HTTP/1.1 200 OK\r\n"
+                     "Content-Type: application/json\r\n"
+                     "Access-Control-Allow-Origin: *\r\n"
+                     "Content-Length: " +
+                     std::to_string(body.size()) + "\r\n\r\n" + body;
+        } else if (method == "OPTIONS") {
+          response = "HTTP/1.1 204 No Content\r\n"
+                     "Access-Control-Allow-Origin: *\r\n"
+                     "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
+                     "Access-Control-Allow-Headers: *\r\n\r\n";
+        } else {
+          response = "HTTP/1.1 404 Not Found\r\n"
+                     "Content-Length: 0\r\n\r\n";
+        }
+
+        asio::write(socket, asio::buffer(response));
+      } catch (const std::exception& e) {
+        LOG_ERROR("HTTP handler error: {}", e.what());
+      }
+    }
+  } catch (const std::exception& e) {
+    LOG_ERROR("HTTP API server fatal error: {}", e.what());
+  }
 }
