@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_disclosure">CyanDesk 只在你于系统设置里打开这项服务、并且当前会话包含控制权限时注入触控。应用不能自己打开这项权限。</string>
+    <string name="pico_limit">这台构建可以装在 Android 9 和 Pico 的 Android 系统上。它没有连接 OpenXR，也不提供 6DoF。</string>
+    <string name="android_limits">Android 9 用前台服务保持采集。Android 10 起要声明 mediaProjection 前台服务类型。Android 14 会检查这次系统录屏同意，不能复用旧的同意。Android 13 起还要你允许通知，否则前台服务不能停留。无障碍输入只能在系统设置里由你打开。这不是 OpenXR，也不是 VR。</string>
+</resources>

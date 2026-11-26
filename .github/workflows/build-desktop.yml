@@ -1,0 +1,204 @@
+name: Build Desktop Client
+
+on:
+  push:
+    branches: [main, integrate/upstream]
+    paths:
+      - "src/**"
+      - "submodules/**"
+      - "xmake.lua"
+      - ".github/workflows/build-desktop.yml"
+  workflow_dispatch:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  # ────────── Linux amd64 ──────────────────────────────────────────────────────
+  build-linux:
+    name: Desktop Linux amd64
+    runs-on: ubuntu-22.04
+    env:
+      XMAKE_GLOBALDIR: ${{ runner.temp }}/xmake
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+
+      - name: Install xmake + system deps
+        run: |
+          # system libs crossdesk links against
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            g++ build-essential cmake pkg-config git curl file \
+            libpulse-dev libasound2-dev libx11-dev libxtst-dev \
+            libxrandr-dev libxfixes-dev libgl1-mesa-dev libegl1-mesa-dev \
+            libwayland-dev libxkbcommon-dev 2>&1 | tail -5
+
+          # xmake
+          curl -fsSL https://xmake.io/shget.text | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Cache xmake packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.XMAKE_GLOBALDIR }}/packages
+          key: linux-xmake-${{ github.sha }}
+          restore-keys: linux-xmake-
+
+      - name: Configure + Build
+        run: |
+          xmake f -a x86_64 -m release --CROSSDESK_VERSION="${GITHUB_SHA:0:7}" -y
+          xmake b -vy crossdesk 2>&1 | tail -30
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp build/linux/x86_64/release/crossdesk dist/crossdesk
+          strip dist/crossdesk || true
+          cd dist && tar -czf crossdesk-linux-amd64.tar.gz crossdesk
+          ls -lh crossdesk-linux-amd64.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux-amd64
+          path: dist/crossdesk-linux-amd64.tar.gz
+
+  # ────────── Windows x64 ─────────────────────────────────────────────────────
+  build-windows:
+    name: Desktop Windows x64
+    runs-on: windows-2022
+    env:
+      XMAKE_GLOBALDIR: D:\xmake_global
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+
+      - name: Install xmake
+        shell: pwsh
+        run: |
+          Invoke-Expression (Invoke-Webrequest 'https://raw.githubusercontent.com/tboox/xmake/master/scripts/get.ps1' -UseBasicParsing).Content
+          echo "C:\Users\runneradmin\xmake" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Setup MSVC env
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\Launch-VsDevShell.ps1" `
+            -Arch amd64 -HostArch amd64 2>&1 | Out-Null
+          $vsDir = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
+          $msvcDir = (Get-ChildItem "$vsDir\VC\Tools\MSVC" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+          $sdkDir  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          $sdkLib  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          $sdkBin  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" | Sort-Object Name -Descending | Select-Object -First 1).FullName + "\x64"
+          $env:PATH    = "$msvcDir\bin\Hostx64\x64;$sdkBin;C:\Program Files\xmake;" + $env:PATH
+          $env:INCLUDE = "$msvcDir\include;$sdkDir\ucrt;$sdkDir\shared;$sdkDir\um;$sdkDir\winrt"
+          $env:LIB     = "$msvcDir\lib\x64;$sdkLib\ucrt\x64;$sdkLib\um\x64"
+
+      - name: Cache xmake packages
+        uses: actions/cache@v4
+        with:
+          path: D:\xmake_global\.xmake\packages
+          key: win-xmake-${{ github.sha }}
+          restore-keys: win-xmake-
+
+      - name: Configure + Build
+        shell: pwsh
+        run: |
+          xmake f -a x86_64 -m release --CROSSDESK_VERSION="$($env:GITHUB_SHA.Substring(0,7))" -y
+          xmake b -vy crossdesk 2>&1 | Select-Object -Last 40
+
+      - name: Locate exe + verify
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build -Filter crossdesk.exe -Recurse | Select-Object -First 1
+          if (-not $exe) { Write-Host "ERROR: crossdesk.exe not found!"; exit 1 }
+          Write-Host "Found: $($exe.FullName) ($([math]::Round($exe.Length/1MB, 1)) MB)"
+          mkdir -p dist
+          Copy-Item $exe.FullName dist/crossdesk.exe
+          Compress-Archive dist/crossdesk.exe dist/crossdesk-win-x64.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows-x64
+          path: dist/crossdesk-win-x64.zip
+
+  # ────────── macOS arm64 ─────────────────────────────────────────────────────
+  build-macos:
+    name: Desktop macOS arm64
+    runs-on: macos-14
+    env:
+      XMAKE_GLOBALDIR: ${{ runner.temp }}/xmake
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+
+      - name: Install xmake
+        run: brew install xmake pkg-config 2>&1 | tail -3
+
+      - name: Cache xmake packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.XMAKE_GLOBALDIR }}/packages
+          key: mac-xmake-${{ github.sha }}
+          restore-keys: mac-xmake-
+
+      - name: Configure + Build
+        run: |
+          xmake f -a arm64 -m release --CROSSDESK_VERSION="${GITHUB_SHA:0:7}" -y
+          xmake b -vy crossdesk 2>&1 | tail -30
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp build/macosx/arm64/release/crossdesk dist/
+          file dist/crossdesk
+          cd dist && tar -czf crossdesk-macos-arm64.tar.gz crossdesk
+          ls -lh crossdesk-macos-arm64.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-arm64
+          path: dist/crossdesk-macos-arm64.tar.gz
+
+  # ────────── GitHub Release (tag v*) ────────────────────────────────────────
+  release:
+    name: Publish Release
+    needs: [build-linux, build-windows, build-macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Rename
+        run: |
+          mkdir -p release
+          cp artifacts/desktop-linux-amd64/*  release/crossdesk-linux-amd64.tar.gz
+          cp artifacts/desktop-windows-x64/*  release/crossdesk-win-x64.zip
+          cp artifacts/desktop-macos-arm64/*  release/crossdesk-macos-arm64.tar.gz
+          ls -lh release/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Desktop ${{ github.ref_name }}
+          draft: false
+          prerelease: true
+          files: release/*
+          body: |
+            **CrossDesk Desktop — CyanDesk fork**
+
+            Windows / Linux / macOS remote desktop client.
+
+            | Platform | Artifact |
+            |----------|----------|
+            | Windows x64 | `crossdesk-win-x64.zip` (unzip → run `crossdesk.exe`) |
+            | Linux amd64 | `crossdesk-linux-amd64.tar.gz` |
+            | macOS arm64 | `crossdesk-macos-arm64.tar.gz` |
+
+            ---
+
+            *Server binaries: see tag `server-latest`.*
+            *Android APK: built from `android/` subdirectory (requires prebuilt `cyandesk.aar`).*

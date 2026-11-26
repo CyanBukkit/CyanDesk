@@ -7,3 +7,20 @@ build/
 
 # VSCode cache
 .vscode
+# Android
+android/.gradle/
+android/app/build/
+android/.idea/
+android/local.properties
+
+# Server build artifacts
+server/*.obj
+server/build/
+
+
+# Local dev junk
+.tools/
+server/logs/
+xmake*.log
+xmake*.txt
+_extract_commits.py
