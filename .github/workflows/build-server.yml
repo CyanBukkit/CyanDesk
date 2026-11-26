@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  # ────────── Linux amd64 (g++ + pkg-config, header-only deps) ────────────────
+  # ── Linux amd64 ─────────────────────────────────────────────────────────────
   build-linux:
     name: Server Linux amd64
     runs-on: ubuntu-22.04
@@ -17,39 +17,27 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          clean: true
+          depth: 1
 
-      - name: Install deps
+      - name: Install deps + build
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            g++ build-essential cmake git pkg-config curl \
-            libssl-dev libasio-dev libspdlog-dev nlohmann-json3-dev \
-            file 2>&1 | tail -3
-
-      - name: Build
-        run: |
+          sudo apt-get install -y -qq g++ pkg-config libssl-dev libasio-dev libspdlog-dev nlohmann-json3-dev 2>&1 | tail -2
           mkdir -p build
           g++ -O2 -std=c++17 -o build/signal_server \
-              src/signal_server.cpp src/main.cpp \
-              src/transmission_manager.cpp src/client_id_generator.cpp \
-              -Ithirdparty/websocketpp/include \
-              $(pkg-config --cflags --libs asio spdlog nlohmann_json openssl) \
-              -lpthread 2>&1 | tail -30
-          file build/signal_server
+              src/signal_server.cpp src/main.cpp src/transmission_manager.cpp src/client_id_generator.cpp \
+              -Ithirdparty/websocketpp/include -D_WEBSOCKETPP_CPP11_INTERNAL_ \
+              $(pkg-config --cflags --libs asio spdlog nlohmann_json openssl) -lpthread 2>&1 | tail -20
 
-      - name: Package
-        run: |
-          cd build
-          tar -czf signal-server-linux-amd64.tar.gz signal_server
-          ls -lh signal-server-linux-amd64.tar.gz
-
+      - name: Package + upload
+        run: cd build && tar -czf signal-server-linux-amd64.tar.gz signal_server && ls -lh signal-server-linux-amd64.tar.gz
       - uses: actions/upload-artifact@v4
-        with:
-          name: server-linux-amd64
-          path: server/build/signal-server-linux-amd64.tar.gz
+        with: { name: server-linux-amd64, path: server/build/signal-server-linux-amd64.tar.gz }
 
-  # ────────── Windows x64 (cl.exe + download header-only deps) ────────────────
+  # ── Windows x64 ────────────────────────────────────────────────────────────
   build-windows:
     name: Server Windows x64
     runs-on: windows-2022
@@ -57,96 +45,48 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          clean: true
+          depth: 1
 
-      - name: Compile + link server.exe
+      - name: MSVC env + download deps + compile
         shell: pwsh
         run: |
-          # ── MSVC env ──────────────────────────────────────────────────────────
-          & "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\Launch-VsDevShell.ps1" `
-            -Arch amd64 -HostArch amd64 2>&1 | Out-Null
+          # MSVC
+          & "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 2>&1 | Out-Null
           $vsDir = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
-          $msvcDir = (Get-ChildItem "$vsDir\VC\Tools\MSVC" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
-          $sdkDir  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" | Sort-Object Name -Descending | Select-Object -First 1).FullName
-          $sdkLib  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" | Sort-Object Name -Descending | Select-Object -First 1).FullName
-          $sdkBin  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" | Sort-Object Name -Descending | Select-Object -First 1).FullName + "\x64"
-          $env:PATH    = "$msvcDir\bin\Hostx64\x64;$sdkBin;" + $env:PATH
-          $env:INCLUDE = "$msvcDir\include;$sdkDir\ucrt;$sdkDir\shared;$sdkDir\um;$sdkDir\winrt"
-          $env:LIB     = "$msvcDir\lib\x64;$sdkLib\ucrt\x64;$sdkLib\um\x64"
+          $msvc  = (Get-ChildItem "$vsDir\VC\Tools\MSVC" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+          $sdkI  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          $sdkL  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib"   | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          $sdkB  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin"    | Sort-Object Name -Descending | Select-Object -First 1).FullName + "\x64"
+          $env:PATH    = "$msvc\bin\Hostx64\x64;$sdkBin;" + $env:PATH
+          $env:INCLUDE = "$msvc\include;$sdkI\ucrt;$sdkI\shared;$sdkI\um;$sdkI\winrt"
+          $env:LIB     = "$msvc\lib\x64;$sdkL\ucrt\x64;$sdkL\um\x64"
 
-          # ── Download header-only deps (asio, spdlog, nlohmann_json) ────────────
-          $deps = "$env:TEMP\cyandesk-deps"
-          New-Item -ItemType Directory -Force -Path $deps | Out-Null
-          function Fetch-Dep($zipUrl, $extractTo, $innerDir) {
-            if (!(Test-Path "$deps\$innerDir")) {
-              Write-Host "Downloading $innerDir ..."
-              Invoke-WebRequest $zipUrl -OutFile "$env:TEMP\dep.zip" -UseBasicParsing
-              Expand-Archive "$env:TEMP\dep.zip" -DestinationPath $extractTo -Force
-            }
-          }
-          Fetch-Dep "https://github.com/chriskohlhoff/asio/archive/refs/tags/v1.32.0.zip"      $deps "asio-1.32.0"
-          Fetch-Dep "https://github.com/gabime/spdlog/archive/refs/tags/v1.14.1.zip"           $deps "spdlog-1.14.1"
-          Fetch-Dep "https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz"   $deps "json-3.11.3"
+          # Download header-only deps (asio, spdlog, nlohmann_json)
+          $d = "$env:TEMP\cyandesk-deps"; New-Item -ItemType Directory -Force -Path $d | Out-Null
+          function Get-Dep($url, $dir) { if (!(Test-Path "$d\$dir")) { Invoke-WebRequest $url -OutFile "$env:TEMP\dep.zip" -UseBasicParsing; Expand-Archive "$env:TEMP\dep.zip" -DestinationPath $d -Force } }
+          Get-Dep "https://github.com/chriskohlhoff/asio/archive/refs/tags/v1.32.0.zip" "asio-1.32.0"
+          Get-Dep "https://github.com/gabime/spdlog/archive/refs/tags/v1.14.1.zip"  "spdlog-1.14.1"
+          Invoke-WebRequest "https://github.com/nlohmann/json/releases/download/v3.11.3/single_include/nlohmann/json.hpp" -OutFile "$env:TEMP\json.hpp" -UseBasicParsing
+          New-Item -ItemType Directory -Force -Path "$d\json-3.11.3\include\nlohmann" | Out-Null
+          Copy-Item "$env:TEMP\json.hpp" "$d\json-3.11.3\include\nlohmann\json.hpp"
 
-          $asioInc   = "$deps\asio-1.32.0\asio\include"
-          $spdlogInc = "$deps\spdlog-1.14.1\include"
-          $jsonInc   = "$deps\json-3.11.3\include"
-          $websocketInc = "thirdparty\websocketpp\include"
+          $asioI  = "$d\asio-1.32.0\asio\include"
+          $spdlogI = "$d\spdlog-1.14.1\include"
+          $jsonI  = "$d\json-3.11.3\include"
+          $wsI    = "thirdparty\websocketpp\include"
 
-          # ── Compile ──────────────────────────────────────────────────────────
+          # Compile
           New-Item -ItemType Directory -Force -Path build | Out-Null
-          cl /O2 /std:c++17 /EHsc /MD /DASIO_STANDALONE /DWIN32_LEAN_AND_MEAN /D_WIN32_WINNT=0x0601 /D_WEBSOCKETPP_CPP11_INTERNAL_ \
-            /I"$websocketInc" /I"$asioInc" /I"$spdlogInc" /I"$jsonInc" /I"src" /I"src\log" /I"src\common" \
-            /Fe:"build\server.exe" \
-            src\signal_server.cpp src\main.cpp src\transmission_manager.cpp src\client_id_generator.cpp \
+          cl /O2 /std:c++17 /EHsc /MD /DASIO_STANDALONE /DWIN32_LEAN_AND_MEAN /D_WIN32_WINNT=0x0601 /D_WEBSOCKETPP_CPP11_INTERNAL_ `
+            /I"$wsI" /I"$asioI" /I"$spdlogI" /I"$jsonI" /I"src" /I"src\log" /I"src\common" `
+            /Fe:"build\server.exe" `
+            src\signal_server.cpp src\main.cpp src\transmission_manager.cpp src\client_id_generator.cpp `
             /link ws2_32.lib Bcrypt.lib shlwapi.lib 2>&1
-          if ($LASTEXITCODE -ne 0) { Write-Host "COMPILE FAILED!"; exit 1 }
-
-      - name: Verify artifact
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem server/build/server.exe -ErrorAction SilentlyContinue
-          if (-not $exe) { Write-Host "ERROR: server.exe not found!"; exit 1 }
-          Write-Host "Found: $($exe.FullName) ($([math]::Round($exe.Length/1KB, 1)) KB)"
+          if ($LASTEXITCODE -ne 0) { Write-Host "COMPILE FAILED"; exit 1 }
+          Write-Host "OK: $([math]::Round((Get-Item build\server.exe).Length/1KB)) KB"
 
       - uses: actions/upload-artifact@v4
-        with:
-          name: server-windows-x64
-          path: server/build/server.exe
-
-  # ────────── macOS arm64 (g++ + brew pkg-config) ──────────────────────────────
-  build-macos:
-    name: Server macOS arm64
-    runs-on: macos-14
-    defaults:
-      run:
-        working-directory: server
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install deps
-        run: |
-          brew update --quiet 2>&1 | tail -1
-          brew install --quiet pkg-config openssl spdlog nlohmann-json asio 2>&1 | tail -3
-
-      - name: Build
-        run: |
-          ASIO_INC=$(brew --prefix asio)/include
-          OPENSSL_DIR=$(brew --prefix openssl@3)
-          mkdir -p build
-          g++ -O2 -std=c++17 -o build/signal_server \
-              src/signal_server.cpp src/main.cpp \
-              src/transmission_manager.cpp src/client_id_generator.cpp \
-              -Ithirdparty/websocketpp/include -I$ASIO_INC \
-              -I"$OPENSSL_DIR/include" -L"$OPENSSL_DIR/lib" \
-              $(pkg-config --cflags --libs spdlog nlohmann-json openssl) \
-              -lpthread 2>&1 | tail -30
-          file build/signal_server
-
-      - name: Package
-        run: cd build && tar -czf signal-server-macos-arm64.tar.gz signal_server
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: server-macos-arm64
-          path: server/build/signal-server-macos-arm64.tar.gz
+        with: { name: server-windows-x64, path: server/build/server.exe }

@@ -8,130 +8,64 @@ on:
 permissions:
   contents: write
 
-# ─── Shared: checkout + clone minirtc (NECESSARY — no longer a git submodule) ──
-# We REMOVED .gitmodules to stop GitHub Actions checkout from failing on nested
-# submodule URLs. Desktop still needs minirtc sources at submodules/minirtc/.
-# Clone it manually before the xmake step.
-
 jobs:
   build-linux:
     name: Desktop Linux amd64
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with: { clean: true, depth: 1 }
 
-      - name: Clone minirtc (was git submodule)
+      - name: Clone minirtc + install deps
         run: |
           git clone --depth=1 https://github.com/kunkundi/minirtc.git submodules/minirtc
-          ls submodules/minirtc/src/ | head -5
+          sudo apt-get update -qq && sudo apt-get install -y -qq \
+            g++ build-essential cmake pkg-config git curl \
+            libpulse-dev libasound2-dev libx11-dev libxtst-dev libxrandr-dev libxfixes-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libwayland-dev libxkbcommon-dev 2>&1 | tail -2
+          curl -fsSL https://xmake.io/shget.text | bash && echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Install xmake + system deps
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            g++ build-essential cmake pkg-config git curl file \
-            libpulse-dev libasound2-dev libx11-dev libxtst-dev \
-            libxrandr-dev libxfixes-dev libgl1-mesa-dev libegl1-mesa-dev \
-            libwayland-dev libxkbcommon-dev 2>&1 | tail -3
-          curl -fsSL https://xmake.io/shget.text | bash
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Configure + Build
+      - name: xmake build + package
         run: |
           xmake f -a x86_64 -m release --CROSSDESK_VERSION="${GITHUB_SHA:0:7}" -y
           xmake b -vy crossdesk 2>&1 | tail -30
-
-      - name: Package
-        run: |
-          mkdir -p dist
-          cp build/linux/x86_64/release/crossdesk dist/crossdesk
-          strip dist/crossdesk || true
-          cd dist && tar -czf crossdesk-linux-amd64.tar.gz crossdesk
-          ls -lh crossdesk-linux-amd64.tar.gz
+          mkdir -p dist && cp build/linux/x86_64/release/crossdesk dist/ && strip dist/crossdesk || true
+          cd dist && tar -czf crossdesk-linux-amd64.tar.gz crossdesk && ls -lh crossdesk-linux-amd64.tar.gz
 
       - uses: actions/upload-artifact@v4
-        with:
-          name: desktop-linux-amd64
-          path: dist/crossdesk-linux-amd64.tar.gz
+        with: { name: desktop-linux-amd64, path: dist/crossdesk-linux-amd64.tar.gz }
 
   build-windows:
     name: Desktop Windows x64
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with: { clean: true, depth: 1 }
 
-      - name: Clone minirtc (was git submodule)
+      - name: Clone minirtc + xmake + MSVC build
         shell: pwsh
         run: |
           git clone --depth=1 https://github.com/kunkundi/minirtc.git submodules/minirtc
-          Get-ChildItem submodules/minirtc/src/ | Select-Object -First 3
-
-      - name: Install xmake
-        shell: pwsh
-        run: |
           Invoke-Expression (Invoke-Webrequest 'https://raw.githubusercontent.com/tboox/xmake/master/scripts/get.ps1' -UseBasicParsing).Content
           echo "C:\Users\runneradmin\xmake" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Setup MSVC + Build
-        shell: pwsh
-        run: |
-          & "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\Launch-VsDevShell.ps1" `
-            -Arch amd64 -HostArch amd64 2>&1 | Out-Null
+          & "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 2>&1 | Out-Null
           $vsDir = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
-          $msvcDir = (Get-ChildItem "$vsDir\VC\Tools\MSVC" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
-          $sdkDir  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" | Sort-Object Name -Descending | Select-Object -First 1).FullName
-          $sdkLib  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" | Sort-Object Name -Descending | Select-Object -First 1).FullName
-          $sdkBin  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" | Sort-Object Name -Descending | Select-Object -First 1).FullName + "\x64"
-          $env:PATH    = "$msvcDir\bin\Hostx64\x64;$sdkBin;C:\Users\runneradmin\xmake;" + $env:PATH
-          $env:INCLUDE = "$msvcDir\include;$sdkDir\ucrt;$sdkDir\shared;$sdkDir\um;$sdkDir\winrt"
-          $env:LIB     = "$msvcDir\lib\x64;$sdkLib\ucrt\x64;$sdkLib\um\x64"
+          $msvc  = (Get-ChildItem "$vsDir\VC\Tools\MSVC" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+          $sdkI  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          $sdkL  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib"   | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          $sdkB  = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin"    | Sort-Object Name -Descending | Select-Object -First 1).FullName + "\x64"
+          $env:PATH    = "$msvc\bin\Hostx64\x64;$sdkB;C:\Users\runneradmin\xmake;" + $env:PATH
+          $env:INCLUDE = "$msvc\include;$sdkI\ucrt;$sdkI\shared;$sdkI\um;$sdkI\winrt"
+          $env:LIB     = "$msvc\lib\x64;$sdkL\ucrt\x64;$sdkL\um\x64"
 
           xmake f -a x86_64 -m release --CROSSDESK_VERSION="$($env:GITHUB_SHA.Substring(0,7))" -y
           xmake b -vy crossdesk 2>&1 | Select-Object -Last 40
 
-      - name: Package
-        shell: pwsh
-        run: |
           $exe = Get-ChildItem -Path build -Filter crossdesk.exe -Recurse | Select-Object -First 1
           if (-not $exe) { Write-Host "ERROR: crossdesk.exe not found!"; exit 1 }
-          Write-Host "Found: $($exe.FullName) ($([math]::Round($exe.Length/1MB, 1)) MB)"
-          mkdir -p dist
-          Copy-Item $exe.FullName dist/crossdesk.exe
+          mkdir -p dist && Copy-Item $exe.FullName dist/crossdesk.exe
           Compress-Archive dist/crossdesk.exe dist/crossdesk-win-x64.zip -Force
 
       - uses: actions/upload-artifact@v4
-        with:
-          name: desktop-windows-x64
-          path: dist/crossdesk-win-x64.zip
-
-  build-macos:
-    name: Desktop macOS arm64
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Clone minirtc (was git submodule)
-        run: |
-          git clone --depth=1 https://github.com/kunkundi/minirtc.git submodules/minirtc
-          ls submodules/minirtc/src/ | head -5
-
-      - name: Install xmake
-        run: brew install xmake pkg-config 2>&1 | tail -3
-
-      - name: Configure + Build
-        run: |
-          xmake f -a arm64 -m release --CROSSDESK_VERSION="${GITHUB_SHA:0:7}" -y
-          xmake b -vy crossdesk 2>&1 | tail -30
-
-      - name: Package
-        run: |
-          mkdir -p dist
-          cp build/macosx/arm64/release/crossdesk dist/
-          file dist/crossdesk
-          cd dist && tar -czf crossdesk-macos-arm64.tar.gz crossdesk
-          ls -lh crossdesk-macos-arm64.tar.gz
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: desktop-macos-arm64
-          path: dist/crossdesk-macos-arm64.tar.gz
+        with: { name: desktop-windows-x64, path: dist/crossdesk-win-x64.zip }
