@@ -9,6 +9,7 @@ permissions:
   contents: write
 
 jobs:
+  # ────────── Linux amd64 (g++ + pkg-config, header-only deps) ────────────────
   build-linux:
     name: Server Linux amd64
     runs-on: ubuntu-22.04
@@ -22,7 +23,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            g++ cmake git pkg-config \
+            g++ build-essential cmake git pkg-config curl \
             libssl-dev libasio-dev libspdlog-dev nlohmann-json3-dev \
             file 2>&1 | tail -3
 
@@ -34,7 +35,7 @@ jobs:
               src/transmission_manager.cpp src/client_id_generator.cpp \
               -Ithirdparty/websocketpp/include \
               $(pkg-config --cflags --libs asio spdlog nlohmann_json openssl) \
-              -lpthread
+              -lpthread 2>&1 | tail -30
           file build/signal_server
 
       - name: Package
@@ -48,6 +49,7 @@ jobs:
           name: server-linux-amd64
           path: server/build/signal-server-linux-amd64.tar.gz
 
+  # ────────── Windows x64 (cl.exe + download header-only deps) ────────────────
   build-windows:
     name: Server Windows x64
     runs-on: windows-2022
@@ -60,6 +62,7 @@ jobs:
       - name: Compile + link server.exe
         shell: pwsh
         run: |
+          # ── MSVC env ──────────────────────────────────────────────────────────
           & "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\Launch-VsDevShell.ps1" `
             -Arch amd64 -HostArch amd64 2>&1 | Out-Null
           $vsDir = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
@@ -71,20 +74,33 @@ jobs:
           $env:INCLUDE = "$msvcDir\include;$sdkDir\ucrt;$sdkDir\shared;$sdkDir\um;$sdkDir\winrt"
           $env:LIB     = "$msvcDir\lib\x64;$sdkLib\ucrt\x64;$sdkLib\um\x64"
 
-          # Download asio header-only if not cached
-          $asioDir = "$env:TEMP\asio-1.32.0"
-          if (!(Test-Path "$asioDir\asio\include")) {
-            Invoke-WebRequest "https://github.com/chriskohlhoff/asio/archive/refs/tags/v1.32.0.zip" -OutFile "$env:TEMP\asio.zip"
-            Expand-Archive "$env:TEMP\asio.zip" -DestinationPath "$env:TEMP" -Force
+          # ── Download header-only deps (asio, spdlog, nlohmann_json) ────────────
+          $deps = "$env:TEMP\cyandesk-deps"
+          New-Item -ItemType Directory -Force -Path $deps | Out-Null
+          function Fetch-Dep($zipUrl, $extractTo, $innerDir) {
+            if (!(Test-Path "$deps\$innerDir")) {
+              Write-Host "Downloading $innerDir ..."
+              Invoke-WebRequest $zipUrl -OutFile "$env:TEMP\dep.zip" -UseBasicParsing
+              Expand-Archive "$env:TEMP\dep.zip" -DestinationPath $extractTo -Force
+            }
           }
-          $asioSrc = "$asioDir\asio\include"
+          Fetch-Dep "https://github.com/chriskohlhoff/asio/archive/refs/tags/v1.32.0.zip"      $deps "asio-1.32.0"
+          Fetch-Dep "https://github.com/gabime/spdlog/archive/refs/tags/v1.14.1.zip"           $deps "spdlog-1.14.1"
+          Fetch-Dep "https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz"   $deps "json-3.11.3"
 
+          $asioInc   = "$deps\asio-1.32.0\asio\include"
+          $spdlogInc = "$deps\spdlog-1.14.1\include"
+          $jsonInc   = "$deps\json-3.11.3\include"
+          $websocketInc = "thirdparty\websocketpp\include"
+
+          # ── Compile ──────────────────────────────────────────────────────────
           New-Item -ItemType Directory -Force -Path build | Out-Null
-          cl /O2 /std:c++17 /EHsc /MD /DASIO_STANDALONE /DWIN32_LEAN_AND_MEAN /D_WIN32_WINNT=0x0601 \
-            /I"thirdparty\websocketpp\include" /I"$asioSrc" /I"src" /I"src\log" /I"src\common" \
+          cl /O2 /std:c++17 /EHsc /MD /DASIO_STANDALONE /DWIN32_LEAN_AND_MEAN /D_WIN32_WINNT=0x0601 /D_WEBSOCKETPP_CPP11_INTERNAL_ \
+            /I"$websocketInc" /I"$asioInc" /I"$spdlogInc" /I"$jsonInc" /I"src" /I"src\log" /I"src\common" \
             /Fe:"build\server.exe" \
             src\signal_server.cpp src\main.cpp src\transmission_manager.cpp src\client_id_generator.cpp \
-            /link ws2_32.lib Bcrypt.lib shlwapi.lib
+            /link ws2_32.lib Bcrypt.lib shlwapi.lib 2>&1
+          if ($LASTEXITCODE -ne 0) { Write-Host "COMPILE FAILED!"; exit 1 }
 
       - name: Verify artifact
         shell: pwsh
@@ -98,6 +114,7 @@ jobs:
           name: server-windows-x64
           path: server/build/server.exe
 
+  # ────────── macOS arm64 (g++ + brew pkg-config) ──────────────────────────────
   build-macos:
     name: Server macOS arm64
     runs-on: macos-14
@@ -123,7 +140,7 @@ jobs:
               -Ithirdparty/websocketpp/include -I$ASIO_INC \
               -I"$OPENSSL_DIR/include" -L"$OPENSSL_DIR/lib" \
               $(pkg-config --cflags --libs spdlog nlohmann-json openssl) \
-              -lpthread 2>&1 | tail -20
+              -lpthread 2>&1 | tail -30
           file build/signal_server
 
       - name: Package
