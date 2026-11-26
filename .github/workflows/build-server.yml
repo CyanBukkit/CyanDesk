@@ -17,7 +17,6 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: true }
 
       - name: Install deps
         run: |
@@ -57,7 +56,6 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: true }
 
       - name: Compile + link server.exe
         shell: pwsh
@@ -73,15 +71,13 @@ jobs:
           $env:INCLUDE = "$msvcDir\include;$sdkDir\ucrt;$sdkDir\shared;$sdkDir\um;$sdkDir\winrt"
           $env:LIB     = "$msvcDir\lib\x64;$sdkLib\ucrt\x64;$sdkLib\um\x64"
 
-          $asioSrc = "$env:LOCALAPPDATA\.xmake\cache\packages\2611\a\asio\1.32.0\source\asio\include"
-          $spdlog  = "$env:LOCALAPPDATA\.xmake\cache\packages\2611\s\spdlog\v1.14.1\source\include"
-          $jsonSrc = "$env:LOCALAPPDATA\.xmake\cache\packages\2611\n\nlohmann_json\v3.11.3\source\include"
-          if (!(Test-Path $asioSrc)) {
-            New-Item -ItemType Directory -Force -Path "$env:TEMP\asio" | Out-Null
+          # Download asio header-only if not cached
+          $asioDir = "$env:TEMP\asio-1.32.0"
+          if (!(Test-Path "$asioDir\asio\include")) {
             Invoke-WebRequest "https://github.com/chriskohlhoff/asio/archive/refs/tags/v1.32.0.zip" -OutFile "$env:TEMP\asio.zip"
-            Expand-Archive "$env:TEMP\asio.zip" -DestinationPath "$env:TEMP\asio"
-            $asioSrc = "$env:TEMP\asio\asio-1.32.0\asio\include"
+            Expand-Archive "$env:TEMP\asio.zip" -DestinationPath "$env:TEMP" -Force
           }
+          $asioSrc = "$asioDir\asio\include"
 
           New-Item -ItemType Directory -Force -Path build | Out-Null
           cl /O2 /std:c++17 /EHsc /MD /DASIO_STANDALONE /DWIN32_LEAN_AND_MEAN /D_WIN32_WINNT=0x0601 \
@@ -110,7 +106,6 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: true }
 
       - name: Install deps
         run: |
