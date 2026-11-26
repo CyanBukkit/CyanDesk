@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           clean: true
-          depth: 1
+          fetch-depth: 1
 
       - name: Install deps + build
         run: |
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           clean: true
-          depth: 1
+          fetch-depth: 1
 
       - name: MSVC env + download deps + compile
         shell: pwsh
