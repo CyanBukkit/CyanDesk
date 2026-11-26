@@ -17,7 +17,7 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive }
+        with: { submodules: true }
 
       - name: Install deps
         run: |
@@ -57,7 +57,7 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive }
+        with: { submodules: true }
 
       - name: Compile + link server.exe
         shell: pwsh
@@ -110,7 +110,7 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive }
+        with: { submodules: true }
 
       - name: Install deps
         run: |
