@@ -4,11 +4,21 @@
 #include <atomic>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <string>
 #include <thread>
-#include <websocketpp/config/asio_no_tls.hpp>
+
+// Conditional TLS support — upgrade websocketpp in thirdparty/ to get TLS.
+#if __has_include(<websocketpp/config/asio_tls.hpp>)
+  #include <websocketpp/config/asio_tls.hpp>
+  #define CROSSDESK_SERVER_TLS 1
+  #include <asio/ssl.hpp>
+#else
+  #include <websocketpp/config/asio_no_tls.hpp>
+  #define CROSSDESK_SERVER_TLS 0
+#endif
 #include <websocketpp/server.hpp>
 
 #include "client_id_generator.h"
@@ -16,7 +26,12 @@
 
 using nlohmann::json;
 
+#if CROSSDESK_SERVER_TLS
+typedef websocketpp::server<websocketpp::config::asio_tls> server;
+typedef websocketpp::lib::shared_ptr<asio::ssl::context> context_ptr;
+#else
 typedef websocketpp::server<websocketpp::config::asio> server;
+#endif
 typedef unsigned int connection_id;
 typedef std::string room_id;
 
@@ -35,13 +50,20 @@ class SignalServer {
 
   bool on_pong(websocketpp::connection_hdl hdl, std::string s);
 
-  void run(uint16_t port, uint16_t http_port, const std::string& server_password);
+  void run(uint16_t port, uint16_t http_port, const std::string& server_password,
+           const std::string& ssl_cert_file = "",
+           const std::string& ssl_key_file = "",
+           const std::string& ca_cert_file = "");
+
+#if CROSSDESK_SERVER_TLS
+  context_ptr OnTlsInit(websocketpp::connection_hdl hdl);
+  bool OnTlsVerify(bool preverified, asio::ssl::verify_context& ctx);
+#endif
 
   void on_message(websocketpp::connection_hdl hdl, server::message_ptr msg);
 
   void send_msg(websocketpp::connection_hdl hdl, json message);
 
-  // HTTP API thread (for device listing)
   void RunHttpApi(uint16_t port);
 
  private:
@@ -51,9 +73,17 @@ class SignalServer {
       ws_connections_;
   unsigned int ws_connection_id_ = 0;
 
-  // Server-wide password (empty = no auth required)
+  bool tls_enabled_ = false;
+  bool mtls_enabled_ = false;
+  std::string ca_cert_file_;
+
+  // Track mTLS per-connection verification
+  std::mutex peer_cert_mutex_;
+  std::map<websocketpp::connection_hdl, bool,
+           std::owner_less<websocketpp::connection_hdl>>
+      peer_cert_verified_;
+
   std::string server_password_;
-  // HTTP API server
   std::thread http_thread_;
   std::atomic<bool> http_running_{false};
 

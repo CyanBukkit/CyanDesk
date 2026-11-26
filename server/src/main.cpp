@@ -7,29 +7,39 @@
 int main(int argc, char* argv[]) {
   SignalServer s;
 
-  // WebSocket port (default 9090)
+  // === WebSocket signal port ===
   uint16_t port = 9090;
-  const char* env_port = std::getenv("SIGNAL_SERVER_PORT");
-  if (env_port) {
+  if (const char* env_port = std::getenv("SIGNAL_SERVER_PORT")) {
     port = static_cast<uint16_t>(std::atoi(env_port));
   } else if (argc > 1) {
     port = static_cast<uint16_t>(std::atoi(argv[1]));
   }
 
-  // HTTP API port for device listing (default 9091, 0 = disabled)
+  // === HTTP API port (device listing JSON), 0 = disabled ===
   uint16_t http_port = 9091;
-  const char* env_http_port = std::getenv("HTTP_API_PORT");
-  if (env_http_port) {
-    http_port = static_cast<uint16_t>(std::atoi(env_http_port));
+  if (const char* env = std::getenv("HTTP_API_PORT")) {
+    http_port = static_cast<uint16_t>(std::atoi(env));
   }
 
-  // Server-wide password (empty = no auth required)
+  // === Server password (empty = no auth, unless mTLS required) ===
   std::string server_password;
-  const char* env_pw = std::getenv("SERVER_PASSWORD");
-  if (env_pw) {
-    server_password = env_pw;
+  if (const char* env = std::getenv("SERVER_PASSWORD")) {
+    server_password = env;
   }
 
-  s.run(port, http_port, server_password);
+  // === TLS server certificate (PEM) + private key ===
+  std::string ssl_cert;
+  if (const char* env = std::getenv("SSL_CERT_FILE")) ssl_cert = env;
+  std::string ssl_key;
+  if (const char* env = std::getenv("SSL_KEY_FILE")) ssl_key = env;
+
+  // === mTLS CA file ===
+  // If set, clients MUST present a cert signed by this CA.
+  // If they do, server password is NOT required.
+  // If they don't present a cert, server password IS required (if set).
+  std::string ca_cert;
+  if (const char* env = std::getenv("CA_CERT_FILE")) ca_cert = env;
+
+  s.run(port, http_port, server_password, ssl_cert, ssl_key, ca_cert);
   return 0;
 }
