@@ -8,13 +8,22 @@ on:
 permissions:
   contents: write
 
+# ─── Shared: checkout + clone minirtc (NECESSARY — no longer a git submodule) ──
+# We REMOVED .gitmodules to stop GitHub Actions checkout from failing on nested
+# submodule URLs. Desktop still needs minirtc sources at submodules/minirtc/.
+# Clone it manually before the xmake step.
+
 jobs:
   build-linux:
     name: Desktop Linux amd64
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, fetch-depth: 0 }
+
+      - name: Clone minirtc (was git submodule)
+        run: |
+          git clone --depth=1 https://github.com/kunkundi/minirtc.git submodules/minirtc
+          ls submodules/minirtc/src/ | head -5
 
       - name: Install xmake + system deps
         run: |
@@ -50,7 +59,12 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, fetch-depth: 0 }
+
+      - name: Clone minirtc (was git submodule)
+        shell: pwsh
+        run: |
+          git clone --depth=1 https://github.com/kunkundi/minirtc.git submodules/minirtc
+          Get-ChildItem submodules/minirtc/src/ | Select-Object -First 3
 
       - name: Install xmake
         shell: pwsh
@@ -95,7 +109,11 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, fetch-depth: 0 }
+
+      - name: Clone minirtc (was git submodule)
+        run: |
+          git clone --depth=1 https://github.com/kunkundi/minirtc.git submodules/minirtc
+          ls submodules/minirtc/src/ | head -5
 
       - name: Install xmake
         run: brew install xmake pkg-config 2>&1 | tail -3
